@@ -8,7 +8,6 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
     <style>
         body { font-family: 'Outfit', sans-serif; background-color: #080c14; color: #f3f4f6; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
         .mono-font { font-family: 'JetBrains Mono', monospace; }
@@ -38,7 +37,7 @@
             <div class="bg-gradient-to-tr from-indigo-600 to-violet-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-500/20"><i data-lucide="music-4" class="w-6 h-6"></i></div>
             <div>
                 <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">TabCraft <span class="text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-semibold">STUDIO PRO</span></h1>
-                <p class="text-xs text-slate-400 hidden sm:block">Tempo independente, reverberação & exportação PDF/TXT/MIDI/MP3</p>
+                <p class="text-xs text-slate-400 hidden sm:block">Tempo independente, reverberação & exportação PDF/TXT/MIDI</p>
                 <p class="text-[10px] text-slate-500 sm:hidden">Editor de Tablatura Fingerstyle</p>
             </div>
         </div>
@@ -164,7 +163,6 @@
                     <button id="btn-export-text" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95"><i data-lucide="file-text" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400"></i>Texto</button>
                     <button id="btn-download-txt" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-emerald-500/10"><i data-lucide="download" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>.TXT</button>
                     <button id="btn-download-midi" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-violet-500/10"><i data-lucide="music-2" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>.MIDI</button>
-                    <button id="btn-download-mp3" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-amber-500/10"><i data-lucide="audio-lines" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>.MP3</button>
                     <button id="btn-download-pdf" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-rose-500/10"><i data-lucide="file-type-2" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>.PDF</button>
                     <button id="btn-share" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95"><i data-lucide="share-2" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i></button>
                 </div>
@@ -401,10 +399,82 @@
             activeCell = { string: 0, step: 0 }; initializeGrid(); }
         document.getElementById('btn-load-demo-1').addEventListener('click', () => loadDemo(1)); document.getElementById('btn-load-demo-2').addEventListener('click', () => loadDemo(2));
 
+        // Generate tab data as blocks of 6 strings
+        function generateTabBlocks(maxCharsPerBlock) {
+            const stringLabels = ['E|', 'B|', 'G|', 'D|', 'A|', 'E|'];
+            const blocks = [];
+            let currentBlockStart = 0;
+            
+            while (currentBlockStart < currentCols) {
+                // Determine how many steps fit in this block
+                let blockEnd = currentBlockStart;
+                let currentLength = 0;
+                
+                while (blockEnd < currentCols) {
+                    // Calculate width of one step (4 chars: fret + dashes or fret+effect + dashes)
+                    let stepWidth = 4;
+                    if (currentLength + stepWidth > maxCharsPerBlock && blockEnd > currentBlockStart) break;
+                    currentLength += stepWidth;
+                    blockEnd++;
+                }
+                
+                // Generate 6 lines for this block
+                const blockLines = [];
+                for (let str = 0; str < 6; str++) {
+                    let line = stringLabels[str];
+                    for (let step = currentBlockStart; step < blockEnd; step++) {
+                        const cell = tabData[str][step];
+                        let ch = '-', ef = '';
+                        if (cell.val !== null) { ch = cell.val.toString(); if (cell.effect) ef = cell.effect.toLowerCase(); }
+                        line += ch + ef;
+                        const fill = 4 - (ch.length + ef.length);
+                        for (let f = 0; f < Math.max(1, fill); f++) line += '-';
+                    }
+                    blockLines.push(line);
+                }
+                blocks.push(blockLines);
+                currentBlockStart = blockEnd;
+            }
+            return blocks;
+        }
+
         // Export Text
-        function generateTraditionalTextTab() { let result = ''; const stringLabels = ['E|', 'B|', 'G|', 'D|', 'A|', 'E|']; for (let str = 0; str < 6; str++) { let sLine = stringLabels[str]; for (let step = 0; step < currentCols; step++) { const cell = tabData[str][step]; let ch = '-', ef = ''; if (cell.val !== null) { ch = cell.val.toString(); if (cell.effect) ef = cell.effect.toLowerCase(); } sLine += ch + ef; const fill = 4 - (ch.length + ef.length); for (let f = 0; f < Math.max(1, fill); f++) sLine += '-'; } result += sLine + '\n'; } return result; }
-        document.getElementById('btn-export-text').addEventListener('click', () => { document.getElementById('export-preview').innerText = generateTraditionalTextTab(); document.getElementById('export-container').classList.remove('hidden'); document.getElementById('export-container').scrollIntoView({ behavior: 'smooth' }); showToast("Visualização gerada!"); });
-        document.getElementById('btn-download-txt').addEventListener('click', () => { const txt = generateTraditionalTextTab(); const date = new Date().toISOString().slice(0, 10); const p = getSavedProjects(); const pname = currentProjectId && p[currentProjectId] ? p[currentProjectId].name : 'tablatura'; const blob = new Blob([`=========================================\n`, ` TABLATURA - ${pname.toUpperCase()}\n`, ` BPM: ${bpm} | Tempos: ${currentCols}\n`, ` Data: ${new Date().toLocaleDateString('pt-BR')}\n`, `=========================================\n\n`, txt], { type: 'text/plain;charset=utf-8' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${pname.replace(/\s+/g, '-').toLowerCase()}-${date}.txt`; document.body.appendChild(link); link.click(); document.body.removeChild(link); showToast("Download .TXT!", "check-circle"); });
+        document.getElementById('btn-export-text').addEventListener('click', () => {
+            const blocks = generateTabBlocks(999); // No limit for screen display
+            let fullText = '';
+            blocks.forEach((block, idx) => {
+                if (idx > 0) fullText += '\n';
+                fullText += block.join('\n') + '\n';
+            });
+            document.getElementById('export-preview').innerText = fullText;
+            document.getElementById('export-container').classList.remove('hidden');
+            document.getElementById('export-container').scrollIntoView({ behavior: 'smooth' });
+            showToast("Visualização gerada!");
+        });
+
+        // TXT Download - each block of 6 strings as a complete set
+        document.getElementById('btn-download-txt').addEventListener('click', () => {
+            const blocks = generateTabBlocks(999); // Full lines
+            const date = new Date().toISOString().slice(0, 10);
+            const p = getSavedProjects(); const pname = currentProjectId && p[currentProjectId] ? p[currentProjectId].name : 'tablatura';
+            
+            let content = `=========================================\n`;
+            content += ` TABLATURA - ${pname.toUpperCase()}\n`;
+            content += ` BPM: ${bpm} | Tempos: ${currentCols}\n`;
+            content += ` Data: ${new Date().toLocaleDateString('pt-BR')}\n`;
+            content += `=========================================\n\n`;
+            
+            blocks.forEach((block, idx) => {
+                if (idx > 0) content += '\n';
+                block.forEach(line => content += line + '\n');
+            });
+            
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+            link.download = `${pname.replace(/\s+/g, '-').toLowerCase()}-${date}.txt`;
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            showToast("Download .TXT!", "check-circle");
+        });
 
         // MIDI Export
         function downloadMidi() {
@@ -428,7 +498,7 @@
         document.getElementById('midi-file-input').addEventListener('change', async (e) => {
             const file = e.target.files[0]; if (!file) return;
             try {
-                const ab = await file.arrayBuffer(); const midi = parseMidi(ab);
+                const ab = await file.arrayBuffer(); const midi = parseMidiFixed(ab);
                 const { tabData: newTab, cols } = midiToTab(midi);
                 currentCols = Math.max(cols, 16); bpm = midi.extractedBpm || bpm;
                 document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = currentCols;
@@ -439,36 +509,6 @@
             e.target.value = '';
         });
 
-        function parseMidi(ab) {
-            const view = new DataView(ab); let offset = 0;
-            const r8 = () => view.getUint8(offset++);
-            const r16 = () => { const v = view.getUint16(offset); offset += 2; return v; };
-            const r32 = () => { const v = view.getUint32(offset); offset += 4; return v; };
-            const rStr = (l) => { let s = ''; for(let i=0;i<l;i++) s += String.fromCharCode(r8()); return s; };
-            if (rStr(4) !== 'MThd') throw new Error('Invalid MIDI');
-            r32(); const fmt = r16(); const nTracks = r16(); const division = r16();
-            let defaultTempo = 500000; const tracks = [];
-            for (let t = 0; t < nTracks; t++) {
-                if (rStr(4) !== 'MTrk') { r32(); continue; }
-                const tLen = r32(); const tEnd = offset + tLen;
-                const events = []; let absTick = 0; let runningStatus = 0;
-                while (offset < tEnd) {
-                    absTick += rVar(); let status = r8();
-                    if (status < 0x80) { status = runningStatus; offset--; } else { runningStatus = status; }
-                    const type = status & 0xF0;
-                    if (type === 0x90) { const n = r8(); const v = r8(); events.push({ absTick, type: v === 0 ? 'off' : 'on', note: n, vel: v }); }
-                    else if (type === 0x80) { r8(); r8(); events.push({ absTick, type: 'off' }); }
-                    else if (type === 0xFF) { const mt = r8(); const ml = rVar(); if (mt === 0x51 && ml === 3) { const mpb = (r8() << 16) | (r8() << 8) | r8(); if (absTick < 500) defaultTempo = mpb; } else { offset += ml; } }
-                    else if (type === 0xF0 || type === 0xF7) { offset += rVar(); }
-                    else { if (type === 0xC0 || type === 0xD0) r8(); else { r8(); r8(); } }
-                }
-                offset = tEnd; tracks.push(events);
-            }
-            return { division, tracks, extractedBpm: Math.round(60000000 / defaultTempo) };
-        }
-
-        function rVar() { const view = new DataView(document.getElementById('midi-file-input').files[0] ? document.getElementById('midi-file-input').files[0] : ''); let v = 0; let b; do { b = view.getUint8(offset++); v = (v << 7) | (b & 0x7F); } while (b & 0x80); return v; }
-        // Fix: parseMidi needs its own offset variable
         function parseMidiFixed(arrayBuffer) {
             const view = new DataView(arrayBuffer); let o = 0;
             const r8 = () => view.getUint8(o++);
@@ -498,23 +538,6 @@
             return { division, tracks, extractedBpm: Math.round(60000000 / defaultTempo) };
         }
 
-        // Rebind with correct parser
-        document.getElementById('btn-import-midi').replaceWith(document.getElementById('btn-import-midi').cloneNode(true));
-        document.getElementById('btn-import-midi').addEventListener('click', () => document.getElementById('midi-file-input').click());
-        document.getElementById('midi-file-input').onchange = async function(e) {
-            const file = e.target.files[0]; if (!file) return;
-            try {
-                const ab = await file.arrayBuffer(); const midi = parseMidiFixed(ab);
-                const { tabData: newTab, cols } = midiToTab(midi);
-                currentCols = Math.max(cols, 16); bpm = midi.extractedBpm || bpm;
-                document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = currentCols;
-                tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" })));
-                for (let s = 0; s < 6; s++) for (let step = 0; step < cols; step++) if (newTab[s][step]) tabData[s][step] = newTab[s][step];
-                activeCell = { string: 0, step: 0 }; initializeGrid(); markDirty(); showToast(`MIDI importado! ${currentCols} tempos • ${bpm} BPM`, "upload-cloud");
-            } catch (err) { console.error(err); showToast("Erro ao ler arquivo MIDI.", "alert-triangle"); }
-            e.target.value = '';
-        };
-
         function midiToTab(midiData) {
             const ticksPerBeat = midiData.division; const stepsPerBeat = 4; const ticksPerStep = ticksPerBeat / stepsPerBeat;
             const openStrings = [64, 59, 55, 50, 45, 40];
@@ -536,54 +559,18 @@
             return { tabData: tab, cols: maxStep };
         }
 
-        // --- MP3 EXPORT (CORRIGIDO) ---
-        async function exportToMp3() {
-            let hasNotes = false; for (let str = 0; str < 6; str++) for (let step = 0; step < currentCols; step++) if (tabData[str][step].val !== null) hasNotes = true;
-            if (!hasNotes) { showToast("Não há notas para exportar.", "alert-circle"); return; }
-            showToast("Renderizando áudio...", "music"); setTimeout(async () => {
-                try {
-                    const stepDur = (60 / bpm) / 4; const totalDur = (currentCols * stepDur) + 5.0; const sr = 44100;
-                    const ctx = new OfflineAudioContext(2, Math.ceil(sr * totalDur), sr); const master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
-                    const voices = Array(6).fill(null);
-                    for (let step = 0; step < currentCols; step++) for (let str = 0; str < 6; str++) { const cd = tabData[str][step]; if (cd && cd.val !== null) scheduleOffline(ctx, step * stepDur, str, cd.val, cd.effect, voices, master); }
-                    const buf = await ctx.startRendering(); showToast("Codificando MP3...", "disc-2"); const blob = await encodeMP3Async(buf, 128);
-                    const p = getSavedProjects(); const pn = currentProjectId && p[currentProjectId] ? p[currentProjectId].name : 'TabCraft';
-                    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${pn.replace(/\s+/g, '_').toLowerCase()}.mp3`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); showToast("MP3 exportado!", "check-circle");
-                } catch (err) { showToast("Erro: " + err.message, "alert-triangle"); }
-            }, 50);
-        }
-        function scheduleOffline(ctx, t, si, fret, eff, vs, dest) {
-            const freq = getFretFrequency(si, fret); if (fret === 'X' || freq === 0) { if (vs[si]) { vs[si].gain.cancelScheduledValues(t); vs[si].gain.setValueAtTime(vs[si].gain.value, t); vs[si].gain.exponentialRampToValueAtTime(0.0001, t+0.05); vs[si].osc.stop(t+0.1); vs[si]=null; } return; }
-            if (eff === 'S' && vs[si]) { const pf = vs[si].frequency; vs[si].osc.frequency.cancelScheduledValues(t); vs[si].osc.frequency.setValueAtTime(pf, t); vs[si].osc.frequency.exponentialRampToValueAtTime(freq, t+0.18); vs[si].frequency=freq; return; }
-            if (vs[si]) { vs[si].gain.cancelScheduledValues(t); vs[si].gain.setValueAtTime(vs[si].gain.value, t); vs[si].gain.exponentialRampToValueAtTime(0.0001, t+0.05); vs[si].osc.stop(t+0.1); }
-            const g = ctx.createGain(); g.gain.setValueAtTime(0.001, t); let md = 3.5, pg = 0.4;
-            if (eff==='H'){pg=0.28;md=3;g.gain.exponentialRampToValueAtTime(pg,t+0.08);} else if(eff==='P'){pg=0.32;md=2.8;g.gain.exponentialRampToValueAtTime(pg,t+0.02);} else if(eff==='T'){pg=0.45;md=0.8;g.gain.exponentialRampToValueAtTime(pg,t+0.01);} else if(eff==='N'){pg=0.35;md=4.5;g.gain.exponentialRampToValueAtTime(pg,t+0.03);} else {g.gain.exponentialRampToValueAtTime(pg,t+0.03);}
-            g.gain.exponentialRampToValueAtTime(pg*0.3,t+0.4); g.gain.exponentialRampToValueAtTime(0.0001,t+md);
-            const o = ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(eff==='N'?freq*2:freq,t);
-            if(eff==='V'){const v=ctx.createOscillator();const vg=ctx.createGain();v.frequency.setValueAtTime(6,t);vg.gain.setValueAtTime(freq*0.03,t);v.connect(vg);vg.connect(o.frequency);v.start(t);v.stop(t+md);}
-            const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(2200,t);o.connect(f);
-            [{t:'sawtooth',f:2,g:0.08,d:0.6},{t:'triangle',f:3,g:0.04,d:0.45}].forEach(c=>{const h=ctx.createOscillator();h.type=c.t;h.frequency.setValueAtTime(freq*c.f,t);const hg=ctx.createGain();hg.gain.setValueAtTime(c.g,t);hg.gain.exponentialRampToValueAtTime(0.0001,t+(md*c.d));h.connect(hg);hg.connect(f);h.start(t);});
-            if(eff!=='H'&&eff!=='P'){const nb=ctx.createBuffer(1,sr*0.04,sr);const nd=nb.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;const nn=ctx.createBufferSource();nn.buffer=nb;const nf=ctx.createBiquadFilter();nf.type='bandpass';nf.frequency.setValueAtTime(800,t);const ng=ctx.createGain();ng.gain.setValueAtTime(0.08,t);ng.gain.exponentialRampToValueAtTime(0.0001,t+0.03);nn.connect(nf);nf.connect(ng);ng.connect(g);nn.start(t);}
-            f.connect(g);g.connect(dest);o.start(t);o.stop(t+md+0.5);vs[si]={osc:o,gain:g,frequency:freq};
-        }
-        async function encodeMP3Async(buf, kbps) { return new Promise(res=>{const ch=buf.numberOfChannels,sr=buf.sampleRate;const enc=new lamejs.Mp3Encoder(ch,sr,kbps);const d=[];const l=buf.getChannelData(0),r=ch>1?buf.getChannelData(1):l;const len=buf.length;let i=0;
-            function proc(){const e=Math.min(i+1152,len);const b=enc.encodeBuffer(l.subarray(i,e),r.subarray(i,e),e-i);if(b.length>0)d.push(b);i=e;if(i<len)setTimeout(proc,0);else{d.push(enc.flush());res(new Blob(d,{type:'audio/mp3'}));}} proc(); }); }
-        document.getElementById('btn-download-mp3').addEventListener('click', exportToMp3);
-
-        // --- PDF EXPORT (MULTI-LINE / MULTI-PAGE) ---
+        // --- PDF EXPORT (FIXED: Each block contains all 6 strings) ---
         document.getElementById('btn-download-pdf').addEventListener('click', () => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
             const pageWidth = 210;
             const pageHeight = 297;
             const marginX = 15;
-            const marginYTop = 20;
             const marginYBottom = 15;
             const contentWidth = pageWidth - marginX * 2;
-            const contentHeight = pageHeight - marginYTop - marginYBottom;
             const fontSize = 10;
-            const lineHeight = 5.5; // Espaçamento entre linhas das cordas
-            const tabLineHeight = 8; // Espaçamento entre blocos de 6 cordas
+            const lineHeight = 5.5; // Space between string lines
+            const blockSpacing = 6; // Space between tab blocks
 
             const projects = getSavedProjects();
             const pname = currentProjectId && projects[currentProjectId] ? projects[currentProjectId].name : 'Tablatura';
@@ -592,87 +579,56 @@
             doc.setFillColor(8, 12, 20); doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
             // Header
-            doc.setFillColor(30, 41, 59); doc.rect(marginX, marginYTop - 10, contentWidth, 28, 'F');
-            doc.setFillColor(99, 102, 241); doc.rect(marginX, marginYTop + 16, contentWidth, 2, 'F');
+            const headerY = 20;
+            doc.setFillColor(30, 41, 59); doc.rect(marginX, headerY - 10, contentWidth, 28, 'F');
+            doc.setFillColor(99, 102, 241); doc.rect(marginX, headerY + 16, contentWidth, 2, 'F');
             doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
-            doc.text(`TabCraft PRO: ${pname}`, marginX + 3, marginYTop);
+            doc.text(`TabCraft PRO: ${pname}`, marginX + 3, headerY);
             doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(156, 163, 175);
-            doc.text(`Violão Fingerstyle | ${bpm} BPM | ${currentCols} tempos`, marginX + 3, marginYTop + 6);
-            doc.text(`Criado em: ${new Date().toLocaleDateString('pt-BR')}`, marginX + 3, marginYTop + 12);
+            doc.text(`Violão Fingerstyle | ${bpm} BPM | ${currentCols} tempos`, marginX + 3, headerY + 6);
+            doc.text(`Criado em: ${new Date().toLocaleDateString('pt-BR')}`, marginX + 3, headerY + 12);
 
-            // Generate tab lines (each string line separately)
-            const stringLabels = ['E|', 'B|', 'G|', 'D|', 'A|', 'E|'];
-            const rawLines = [];
-            for (let str = 0; str < 6; str++) {
-                let sLine = stringLabels[str];
-                for (let step = 0; step < currentCols; step++) {
-                    const cell = tabData[str][step]; let ch = '-', ef = '';
-                    if (cell.val !== null) { ch = cell.val.toString(); if (cell.effect) ef = cell.effect.toLowerCase(); }
-                    sLine += ch + ef;
-                    const fill = 4 - (ch.length + ef.length);
-                    for (let f = 0; f < Math.max(1, fill); f++) sLine += '-';
-                }
-                rawLines.push(sLine);
-            }
-
-            // Calculate chars that fit per line using jsPDF text width measurement
+            // Calculate how many characters fit per line
             doc.setFont('courier', 'normal'); doc.setFontSize(fontSize);
             const testStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
             const testWidth = doc.getTextWidth(testStr);
             const charWidth = testWidth / testStr.length;
-            const charsPerLine = Math.floor(contentWidth / charWidth);
+            const maxCharsPerBlock = Math.floor(contentWidth / charWidth);
 
-            // Split each string line into chunks
-            const chunks = [];
-            for (let i = 0; i < 6; i++) {
-                const line = rawLines[i];
-                let start = 0;
-                while (start < line.length) {
-                    // Find a clean break point (at end of a 4-char block or just at charsPerLine)
-                    let end = start + charsPerLine;
-                    // Try to break at a '-' boundary to avoid cutting a fret number
-                    if (end < line.length) {
-                        // Look backwards a bit for a clean break
-                        const searchBack = Math.min(6, end - start);
-                        for (let j = 0; j < searchBack; j++) {
-                            if (line[end - j] === '-' || line[end - j] === '|') { end = end - j; break; }
-                        }
-                    }
-                    chunks.push(line.substring(start, end));
-                    start = end;
+            // Generate tab blocks (each block = 6 string lines for a range of columns)
+            const blocks = generateTabBlocks(maxCharsPerBlock);
+
+            // Print blocks
+            let y = headerY + 28; // Start after header
+            let page = 1;
+
+            blocks.forEach((block, blockIdx) => {
+                const blockHeight = 6 * lineHeight;
+                
+                // Check if we need a new page
+                if (y + blockHeight > pageHeight - marginYBottom) {
+                    doc.addPage();
+                    page++;
+                    doc.setFillColor(8, 12, 20); doc.rect(0, 0, pageWidth, pageHeight, 'F');
+                    y = 15;
+                    // Continuation header
+                    doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+                    doc.text(`Continuação de ${pname}`, marginX, y);
+                    y += 10;
                 }
-            }
 
-            // Now chunks contains all the text pieces. We need to print 6 lines at a time (one tab block),
-            // then leave a gap, then print the next 6 lines.
-            let y = marginYTop + 26;
-            let chunkIndex = 0;
-
-            while (chunkIndex < chunks.length) {
-                // Print a block of 6 lines (one string set)
-                for (let lineInBlock = 0; lineInBlock < 6; lineInBlock++) {
-                    if (chunkIndex >= chunks.length) break;
-
-                    // Check if we need a new page
-                    if (y + lineHeight > pageHeight - marginYBottom) {
-                        doc.addPage();
-                        doc.setFillColor(8, 12, 20); doc.rect(0, 0, pageWidth, pageHeight, 'F');
-                        y = marginYTop + 5;
-                        // Continue indicator
-                        doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
-                        doc.text(`...continuação de ${pname}`, marginX, y);
-                        y += lineHeight;
-                    }
-
-                    doc.setFont('courier', 'bold'); doc.setFontSize(fontSize); doc.setTextColor(52, 211, 153);
-                    doc.text(chunks[chunkIndex], marginX, y);
+                // Print all 6 lines of this block
+                doc.setFont('courier', 'bold'); doc.setFontSize(fontSize); doc.setTextColor(52, 211, 153);
+                block.forEach((line) => {
+                    doc.text(line, marginX, y);
                     y += lineHeight;
-                    chunkIndex++;
-                }
+                });
 
-                // Add spacing between tab blocks
-                y += 4;
-            }
+                // Add spacing between blocks (unless it's the last one)
+                if (blockIdx < blocks.length - 1) {
+                    y += blockSpacing;
+                }
+            });
 
             // Footer on last page
             doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
