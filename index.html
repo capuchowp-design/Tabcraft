@@ -16,6 +16,7 @@
             color: #f3f4f6;
             user-select: none;
             -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
         .mono-font { font-family: 'JetBrains Mono', monospace; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -39,6 +40,29 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes cellTapPulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+            50% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(99,102,241,0.3); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+        }
+        @keyframes cellTapEmpty {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(148,163,184,0); }
+            50% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(148,163,184,0.2); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(148,163,184,0); }
+        }
+        .cell-tap-active {
+            animation: cellTapPulse 0.25s ease-out;
+        }
+        .cell-tap-empty {
+            animation: cellTapEmpty 0.2s ease-out;
+        }
+        @keyframes newColFlash {
+            0% { background-color: rgba(99,102,241,0.3); }
+            100% { background-color: rgba(15,23,42,0.9); }
+        }
+        .col-flash-new {
+            animation: newColFlash 0.6s ease-out;
+        }
         .project-card { animation: fadeInUp 0.3s ease-out; }
         .project-card:hover { transform: translateY(-2px); transition: transform 0.2s ease; }
         .add-col-btn { transition: all 0.2s ease; }
@@ -46,6 +70,30 @@
             background: rgba(99, 102, 241, 0.2) !important;
             border-color: rgba(99, 102, 241, 0.5) !important;
             color: #818cf8 !important;
+        }
+        #tab-scroll-container {
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+        .touch-hint {
+            pointer-events: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(99,102,241,0.4);
+            opacity: 0;
+            z-index: 20;
+        }
+        .touch-hint.show {
+            animation: touchRipple 0.4s ease-out forwards;
+        }
+        @keyframes touchRipple {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
         }
     </style>
 </head>
@@ -61,22 +109,23 @@
                 <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">
                     TabCraft <span class="text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-semibold">STUDIO PRO</span>
                 </h1>
-                <p class="text-xs text-slate-400">Tempo independente, reverberação & exportação PDF/TXT/MIDI/MP3</p>
+                <p class="text-xs text-slate-400 hidden sm:block">Tempo independente, reverberação & exportação PDF/TXT/MIDI/MP3</p>
+                <p class="text-[10px] text-slate-500 sm:hidden">Editor de Tablatura Fingerstyle</p>
             </div>
         </div>
 
-        <div class="flex items-center gap-2 sm:gap-3">
+        <div class="flex items-center gap-2">
             <div id="project-status-bar" class="hidden sm:flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-full">
                 <div class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" id="save-status-dot"></div>
                 <span id="current-project-name" class="text-xs text-slate-300 font-medium">Novo Projeto</span>
             </div>
 
-            <button id="btn-save-project" class="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 shadow-lg shadow-indigo-500/20">
+            <button id="btn-save-project" class="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 shadow-lg shadow-indigo-500/20">
                 <i data-lucide="save" class="w-3.5 h-3.5"></i>
                 <span class="hidden sm:inline">Salvar</span>
             </button>
 
-            <button id="btn-open-library" class="relative p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition">
+            <button id="btn-open-library" class="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition">
                 <i data-lucide="folder-open" class="w-5 h-5"></i>
             </button>
         </div>
@@ -195,22 +244,22 @@
                     <i data-lucide="info" class="w-5 h-5"></i>
                 </div>
                 <div>
-                    <h4 class="text-xs font-bold text-indigo-300 uppercase tracking-wider">Como funciona o tempo físico?</h4>
+                    <h4 class="text-xs font-bold text-indigo-300 uppercase tracking-wider">Como funciona?</h4>
                     <p class="text-xs text-slate-300 mt-1 leading-relaxed">
-                        Cada coluna na grade representa um tempo independente. Espaços em branco permitem que <strong>notas anteriores continuem soando</strong> até que uma nova nota ou abafador (<span class="text-rose-400 font-bold">X</span>) seja acionado.
+                        Cada coluna representa um tempo. Toque na grade para selecionar e use o console de trastes para inserir notas. <strong class="text-indigo-400">Ao chegar ao final, uma nova coluna é criada automaticamente!</strong>
                     </p>
                 </div>
             </div>
 
             <!-- EDITOR -->
-            <div class="bg-slate-950 border border-slate-850 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col gap-4">
+            <div class="bg-slate-950 border border-slate-850 rounded-3xl p-3 sm:p-6 shadow-2xl flex flex-col gap-4">
                 
                 <!-- CONTROLE DE TEMPOS DINÂMICO -->
-                <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-900/40 p-3 rounded-2xl border border-slate-800/60">
-                    <div class="flex items-center gap-3 flex-wrap">
-                        <span class="text-xs text-slate-400 font-medium">Quantidade de Tempos:</span>
+                <div class="flex flex-wrap items-center justify-between gap-2 sm:gap-3 bg-slate-900/40 p-3 rounded-2xl border border-slate-800/60">
+                    <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <span class="text-xs text-slate-400 font-medium hidden sm:inline">Tempos:</span>
                         
-                        <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                        <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
                             <button id="btn-remove-col" class="w-7 h-7 flex items-center justify-center rounded-md bg-slate-800 hover:bg-rose-900/30 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-800 transition active:scale-90" title="Remover último tempo">
                                 <i data-lucide="minus" class="w-3.5 h-3.5"></i>
                             </button>
@@ -222,33 +271,41 @@
                             </button>
                         </div>
 
-                        <button id="btn-add-10-cols" class="px-2.5 py-1.5 bg-slate-800 hover:bg-indigo-900/20 text-slate-300 hover:text-indigo-400 border border-slate-700 hover:border-indigo-800 text-[10px] font-medium rounded-lg transition flex items-center gap-1 active:scale-95" title="Adicionar 10 tempos de uma vez">
+                        <button id="btn-add-10-cols" class="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-slate-800 hover:bg-indigo-900/20 text-slate-300 hover:text-indigo-400 border border-slate-700 hover:border-indigo-800 text-[10px] font-medium rounded-lg transition flex items-center gap-1 active:scale-95">
                             <i data-lucide=" ChevronsRight" class="w-3 h-3"></i> +10
                         </button>
                     </div>
 
-                    <div class="flex gap-2">
-                        <button id="btn-prev-step" class="px-2.5 py-1.5 bg-slate-950 text-slate-300 hover:text-white border border-slate-800 text-xs font-medium rounded-lg transition flex items-center gap-1.5">
-                            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Voltar
+                    <div class="flex gap-1 sm:gap-2">
+                        <button id="btn-prev-step" class="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-slate-950 text-slate-300 hover:text-white border border-slate-800 text-[10px] sm:text-xs font-medium rounded-lg transition flex items-center gap-1">
+                            <i data-lucide="arrow-left" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i> <span class="hidden sm:inline">Voltar</span>
                         </button>
-                        <button id="btn-next-step" class="px-2.5 py-1.5 bg-slate-950 text-slate-300 hover:text-white border border-slate-800 text-xs font-medium rounded-lg transition flex items-center gap-1.5">
-                            Avançar <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                        <button id="btn-next-step" class="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-slate-950 text-slate-300 hover:text-white border border-slate-800 text-[10px] sm:text-xs font-medium rounded-lg transition flex items-center gap-1">
+                            <span class="hidden sm:inline">Avançar</span> <i data-lucide="arrow-right" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i>
                         </button>
                     </div>
                 </div>
 
-                <!-- GRADE -->
-                <div class="overflow-x-auto relative rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                <!-- Indicador de scroll auto -->
+                <div class="flex items-center gap-2 px-1">
+                    <div class="flex items-center gap-1.5 text-[10px] text-slate-500">
+                        <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                        <span>Scroll automático ativo • Toque na grade para editar</span>
+                    </div>
+                </div>
+
+                <!-- GRADE COM SCROLL HORIZONTAL -->
+                <div id="tab-scroll-container" class="overflow-x-auto relative rounded-2xl border border-slate-800 bg-slate-950/50 p-3 scroll-smooth">
                     
-                    <div class="flex items-center mb-2" id="timeline-bar">
+                    <div class="flex items-center mb-2 min-w-max" id="timeline-bar">
                         <div class="w-12 flex-shrink-0 text-right pr-4 text-[10px] uppercase font-bold text-slate-600">Tempo</div>
-                        <div class="flex flex-1" id="timeline-cols"></div>
+                        <div class="flex" id="timeline-cols"></div>
                         <button id="btn-add-col-inline" class="add-col-btn ml-1 flex-shrink-0 w-8 h-5 rounded-md bg-slate-900/50 border border-dashed border-slate-700 text-slate-600 hover:text-indigo-400 flex items-center justify-center transition cursor-pointer" title="Adicionar tempo">
                             <i data-lucide="plus" class="w-3 h-3"></i>
                         </button>
                     </div>
 
-                    <div class="flex flex-col gap-2 relative" id="tab-grid-container">
+                    <div class="flex flex-col gap-2 relative min-w-max" id="tab-grid-container">
                         <div id="play-cursor" class="absolute top-0 bottom-0 w-[2px] bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,1)] z-10 transition-all duration-75 pointer-events-none left-12 ml-[16px]"></div>
 
                         <div class="string-row flex items-center string-line" data-string="0">
@@ -256,8 +313,8 @@
                                 <span class="text-xs font-bold text-slate-400">E</span>
                                 <span class="text-[9px] text-slate-500 font-medium">1ª</span>
                             </div>
-                            <div class="string-steps flex flex-1 gap-1" data-string="0"></div>
-                            <button class="add-col-btn string-add-btn flex-shrink-0 w-8 h-8 rounded-full bg-slate-900/30 border border-dashed border-slate-700/50 text-slate-600 hover:text-indigo-400 flex items-center justify-center transition cursor-pointer mt-0" title="Adicionar tempo">
+                            <div class="string-steps flex gap-1" data-string="0"></div>
+                            <button class="add-col-btn string-add-btn flex-shrink-0 w-8 h-8 rounded-full bg-slate-900/30 border border-dashed border-slate-700/50 text-slate-600 hover:text-indigo-400 flex items-center justify-center transition cursor-pointer" title="Adicionar tempo">
                                 <i data-lucide="plus" class="w-3 h-3"></i>
                             </button>
                         </div>
@@ -266,51 +323,51 @@
                                 <span class="text-xs font-bold text-slate-400">B</span>
                                 <span class="text-[9px] text-slate-500 font-medium">2ª</span>
                             </div>
-                            <div class="string-steps flex flex-1 gap-1" data-string="1"></div>
+                            <div class="string-steps flex gap-1" data-string="1"></div>
                         </div>
                         <div class="string-row flex items-center string-line" data-string="2">
                             <div class="w-12 flex-shrink-0 flex justify-between pr-4 z-10 bg-slate-950">
                                 <span class="text-xs font-bold text-slate-400">G</span>
                                 <span class="text-[9px] text-slate-500 font-medium">3ª</span>
                             </div>
-                            <div class="string-steps flex flex-1 gap-1" data-string="2"></div>
+                            <div class="string-steps flex gap-1" data-string="2"></div>
                         </div>
                         <div class="string-row flex items-center string-line" data-string="3">
                             <div class="w-12 flex-shrink-0 flex justify-between pr-4 z-10 bg-slate-950">
                                 <span class="text-xs font-bold text-slate-400">D</span>
                                 <span class="text-[9px] text-slate-500 font-medium">4ª</span>
                             </div>
-                            <div class="string-steps flex flex-1 gap-1" data-string="3"></div>
+                            <div class="string-steps flex gap-1" data-string="3"></div>
                         </div>
                         <div class="string-row flex items-center string-line" data-string="4">
                             <div class="w-12 flex-shrink-0 flex justify-between pr-4 z-10 bg-slate-950">
                                 <span class="text-xs font-bold text-slate-400">A</span>
                                 <span class="text-[9px] text-slate-500 font-medium">5ª</span>
                             </div>
-                            <div class="string-steps flex flex-1 gap-1" data-string="4"></div>
+                            <div class="string-steps flex gap-1" data-string="4"></div>
                         </div>
                         <div class="string-row flex items-center string-line" data-string="5">
                             <div class="w-12 flex-shrink-0 flex justify-between pr-4 z-10 bg-slate-950">
                                 <span class="text-xs font-bold text-slate-400">E</span>
                                 <span class="text-[9px] text-slate-500 font-medium">6ª</span>
                             </div>
-                            <div class="string-steps flex flex-1 gap-1" data-string="5"></div>
+                            <div class="string-steps flex gap-1" data-string="5"></div>
                         </div>
                     </div>
                 </div>
 
                 <!-- TRASTE VIRTUAL -->
-                <div class="mt-2 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-3">
+                <div class="mt-1 sm:mt-2 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-3">
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-xs font-bold text-slate-400 flex items-center gap-1.5">
                             <i data-lucide="smartphone" class="w-4 h-4 text-indigo-400"></i>
-                            Console de Trastes Virtuais
+                            Console de Trastes
                         </span>
-                        <span class="text-[10px] text-slate-500">Selecione uma casa na grade acima e toque no traste desejado</span>
+                        <span class="text-[10px] text-slate-500 hidden sm:inline">Selecione uma casa na grade e toque no traste desejado</span>
                     </div>
 
-                    <div class="flex flex-wrap gap-1.5">
-                        <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-950 text-rose-400 border border-rose-950 hover:bg-rose-950/30 rounded-xl font-bold text-xs transition active:scale-95 flex items-center justify-center" data-val="X">Abafar (X)</button>
+                    <div class="flex flex-wrap gap-1 sm:gap-1.5">
+                        <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-950 text-rose-400 border border-rose-950 hover:bg-rose-950/30 rounded-xl font-bold text-xs transition active:scale-95 flex items-center justify-center" data-val="X">X</button>
                         <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="0">0</button>
                         <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="1">1</button>
                         <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="2">2</button>
@@ -325,31 +382,28 @@
                         <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="12">12</button>
                         <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="15">15</button>
                         <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="17">17</button>
-                        <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="19">19</button>
-                        <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="22">22</button>
-                        <button class="fret-btn flex-1 min-w-[36px] h-10 bg-slate-800 text-slate-100 hover:bg-slate-700 rounded-xl font-bold text-sm transition active:scale-95 flex items-center justify-center" data-val="24">24</button>
                     </div>
                 </div>
 
                 <!-- EXPORTAÇÃO -->
-                <div class="mt-4 flex flex-wrap gap-3">
-                    <button id="btn-export-text" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95">
-                        <i data-lucide="file-text" class="w-4 h-4 text-slate-400"></i> Visualizar Tablatura de Texto
+                <div class="mt-3 sm:mt-4 flex flex-wrap gap-2 sm:gap-3">
+                    <button id="btn-export-text" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400"></i> <span class="hidden sm:inline">Visualizar</span> Texto
                     </button>
-                    <button id="btn-download-txt" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95 shadow-lg shadow-emerald-500/10">
-                        <i data-lucide="download" class="w-4 h-4"></i> Baixar .TXT
+                    <button id="btn-download-txt" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-emerald-500/10">
+                        <i data-lucide="download" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i> .TXT
                     </button>
-                    <button id="btn-download-midi" class="px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95 shadow-lg shadow-violet-500/10">
-                        <i data-lucide="music-2" class="w-4 h-4"></i> Baixar .MIDI
+                    <button id="btn-download-midi" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-violet-500/10">
+                        <i data-lucide="music-2" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i> .MIDI
                     </button>
-                    <button id="btn-download-mp3" class="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95 shadow-lg shadow-amber-500/10">
-                        <i data-lucide="audio-lines" class="w-4 h-4"></i> Baixar .MP3
+                    <button id="btn-download-mp3" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-amber-500/10">
+                        <i data-lucide="audio-lines" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i> .MP3
                     </button>
-                    <button id="btn-download-pdf" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95 shadow-lg shadow-rose-500/10">
-                        <i data-lucide="file-type-2" class="w-4 h-4"></i> Baixar .PDF
+                    <button id="btn-download-pdf" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-rose-500/10">
+                        <i data-lucide="file-type-2" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i> .PDF
                     </button>
-                    <button id="btn-share" class="px-4 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95">
-                        <i data-lucide="share-2" class="w-4 h-4"></i> Compartilhar
+                    <button id="btn-share" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95">
+                        <i data-lucide="share-2" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i> <span class="hidden sm:inline">Compartilhar</span>
                     </button>
                 </div>
 
@@ -363,9 +417,7 @@
                         Visualização da Tablatura
                     </h3>
                     <div class="flex gap-2">
-                        <button id="btn-copy-tab" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs rounded-lg transition">
-                            Copiar Texto
-                        </button>
+                        <button id="btn-copy-tab" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs rounded-lg transition">Copiar</button>
                         <button onclick="document.getElementById('export-container').classList.add('hidden')" class="text-slate-500 hover:text-slate-300">
                             <i data-lucide="x" class="w-4 h-4"></i>
                         </button>
@@ -389,12 +441,7 @@
                     <i data-lucide="x" class="w-4.5 h-4.5"></i>
                 </button>
             </div>
-            <div id="projects-list" class="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
-                <div class="text-center py-8 text-slate-500 text-sm">
-                    <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
-                    Nenhum projeto salvo ainda.
-                </div>
-            </div>
+            <div id="projects-list" class="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1"></div>
             <div class="bg-slate-900/50 border border-slate-800/50 p-3 rounded-xl">
                 <p class="text-[11px] text-slate-400 text-center">Projetos salvos localmente no navegador.</p>
             </div>
@@ -551,6 +598,24 @@
         let currentProjectId = null;
         let isDirty = false;
 
+        // --- AUTO SCROLL ---
+        function autoScrollToStep(stepIndex) {
+            const container = document.getElementById('tab-scroll-container');
+            if (!container) return;
+            
+            const cell = document.querySelector(`.string-steps[data-string="0"] [data-step="${stepIndex}"]`);
+            if (!cell) return;
+
+            const containerRect = container.getBoundingClientRect();
+            const cellRect = cell.getBoundingClientRect();
+            const cellWidth = cellRect.width + 4; // gap
+            const targetCenter = cellRect.left + cellRect.width / 2;
+            const containerCenter = containerRect.left + containerRect.width / 2;
+            const scrollOffset = targetCenter - containerCenter;
+            
+            container.scrollBy({ left: scrollOffset, behavior: 'smooth' });
+        }
+
         // --- SAVE SYSTEM ---
         function getSavedProjects() {
             try { return JSON.parse(localStorage.getItem('tabcraft_projects') || '{}'); } catch(e) { return {}; }
@@ -694,8 +759,7 @@
 
         // --- GRID ---
         function ensureDataCapacity(cols) {
-            const needed = cols;
-            if (needed > tabData[0].length) {
+            if (cols > tabData[0].length) {
                 tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" })));
             }
         }
@@ -708,15 +772,29 @@
                 const si = parseInt(container.getAttribute('data-string'));
                 for (let step = 0; step < currentCols; step++) {
                     const cell = document.createElement('div');
-                    cell.className = 'w-8 h-8 rounded-full border border-slate-800 bg-slate-900/90 flex items-center justify-center cursor-pointer font-bold text-xs transition relative group z-10 active:scale-90';
-                    cell.setAttribute('data-string', si); cell.setAttribute('data-step', step);
+                    cell.className = 'w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-800 bg-slate-900/90 flex items-center justify-center cursor-pointer font-bold text-xs transition relative group z-10 active:scale-90';
+                    cell.setAttribute('data-string', si); 
+                    cell.setAttribute('data-step', step);
                     const innerText = document.createElement('span');
                     innerText.className = 'cell-text text-slate-500 hover:text-white';
                     innerText.innerText = '-'; cell.appendChild(innerText);
                     const badge = document.createElement('span');
                     badge.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 rounded-md hidden shadow-sm'; cell.appendChild(badge);
-                    cell.addEventListener('mousedown', (e) => handleCellSelect(si, step));
-                    cell.addEventListener('touchstart', (e) => { e.preventDefault(); handleCellSelect(si, step); }, { passive: false });
+
+                    // Touch handler with haptic-like feedback
+                    cell.addEventListener('mousedown', (e) => {
+                        handleCellSelect(si, step);
+                        addCellTapAnimation(cell, tabData[si][step].val !== null);
+                    });
+                    cell.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        handleCellSelect(si, step);
+                        addCellTapAnimation(cell, tabData[si][step].val !== null);
+                    }, { passive: false });
+                    cell.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                    }, { passive: false });
+
                     container.appendChild(cell);
                 }
             });
@@ -725,17 +803,30 @@
             timelineCols.innerHTML = '';
             for (let step = 0; step < currentCols; step++) {
                 const tick = document.createElement('div');
-                tick.className = `w-8 text-center text-[10px] font-extrabold ${step % 4 === 0 ? 'text-indigo-400' : 'text-slate-600'}`;
+                tick.className = `w-8 sm:w-9 text-center text-[10px] font-extrabold ${step % 4 === 0 ? 'text-indigo-400' : 'text-slate-600'}`;
                 tick.innerText = (step + 1); timelineCols.appendChild(tick);
             }
             updateGridUI();
+        }
+
+        function addCellTapAnimation(cellEl, hasNote) {
+            cellEl.classList.remove('cell-tap-active', 'cell-tap-empty');
+            void cellEl.offsetWidth; // Force reflow
+            cellEl.classList.add(hasNote ? 'cell-tap-active' : 'cell-tap-empty');
+            setTimeout(() => cellEl.classList.remove('cell-tap-active', 'cell-tap-empty'), 300);
         }
 
         function handleCellSelect(si, step) {
             activeCell.string = si; activeCell.step = step;
             const cd = tabData[si][step];
             if (cd && cd.val !== null) triggerGuitarNote(si, cd.val, cd.effect);
+            
             updateGridUI();
+            
+            // Auto scroll to keep the cell visible
+            if (window.innerWidth < 1024) {
+                autoScrollToStep(step);
+            }
         }
 
         function updateGridUI() {
@@ -746,7 +837,7 @@
                     const data = tabData[str][step];
                     const textEl = cell.querySelector('.cell-text');
                     const badgeEl = cell.querySelector('.effect-badge');
-                    cell.className = 'w-8 h-8 rounded-full border bg-slate-900 flex items-center justify-center cursor-pointer font-bold text-xs transition relative group z-10 active:scale-95';
+                    cell.className = 'w-8 h-8 sm:w-9 sm:h-9 rounded-full border bg-slate-900 flex items-center justify-center cursor-pointer font-bold text-xs transition relative group z-10';
                     textEl.className = 'cell-text';
                     if (activeCell.string === str && activeCell.step === step) {
                         cell.classList.add('border-indigo-500', 'bg-indigo-950/40', 'ring-2', 'ring-indigo-400/40');
@@ -774,19 +865,39 @@
             }
         }
 
-        function addColumns(count) {
+        // --- AUTO-ADD COLUMN ---
+        function addColumns(count, skipScroll = false) {
             const newCols = currentCols + count;
             if (newCols > 999) { showToast("Limite máximo: 999 tempos!", "alert-circle"); return; }
             stopPlayback();
+            
+            // Expand tabData if needed
+            ensureDataCapacity(newCols);
+            
+            // Initialize new cells
+            for (let str = 0; str < 6; str++) {
+                for (let step = currentCols; step < newCols; step++) {
+                    tabData[str][step] = { val: null, effect: "" };
+                }
+            }
+            
             currentCols = newCols;
-            ensureDataCapacity(currentCols);
             document.getElementById('cols-input').value = currentCols;
             if (activeCell.step !== null && activeCell.step >= currentCols) {
                 activeCell.step = currentCols - 1;
             }
             initializeGrid();
             markDirty();
-            showToast(`+${count} tempo${count > 1 ? 's' : ''} adicionado${count > 1 ? 's' : ''}! Total: ${currentCols}`, "plus");
+            
+            // Scroll to new columns
+            if (!skipScroll && count <= 1) {
+                const scrollToStep = Math.max(0, currentCols - 1);
+                setTimeout(() => autoScrollToStep(scrollToStep), 50);
+            }
+
+            if (count === 1) {
+                showToast(`+1 tempo adicionado! Total: ${currentCols}`, "plus");
+            }
         }
 
         function removeColumn() {
@@ -804,12 +915,30 @@
 
         function setNoteValue(val) {
             if (activeCell.string === null || activeCell.step === null) { showToast("Selecione um tempo na grade!", "alert-circle"); return; }
+            
+            // AUTO-ADD column if at the last column
+            if (activeCell.step === currentCols - 1) {
+                addColumns(1, true);
+                // Keep activeCell at the old position (now second to last)
+                activeCell.step = currentCols - 2;
+            }
+            
             const str = activeCell.string, step = activeCell.step;
             if (val === 'X') { tabData[str][step].val = 'X'; tabData[str][step].effect = ''; triggerGuitarNote(str, 'X'); }
             else if (val === null) { tabData[str][step].val = null; tabData[str][step].effect = ''; dampString(str); }
             else { const t = parseInt(val); tabData[str][step].val = t; triggerGuitarNote(str, t, tabData[str][step].effect); }
+            
             markDirty(); updateGridUI();
-            if (step < currentCols - 1) { activeCell.step = step + 1; updateGridUI(); }
+            
+            // Move cursor forward
+            if (step < currentCols - 1) {
+                activeCell.step = step + 1;
+                updateGridUI();
+                // Auto scroll on mobile
+                if (window.innerWidth < 1024) {
+                    setTimeout(() => autoScrollToStep(activeCell.step), 100);
+                }
+            }
         }
 
         // Keyboard
@@ -818,8 +947,8 @@
             if (e.key >= '0' && e.key <= '9') setNoteValue(e.key);
             else if (e.key === 'x' || e.key === 'X') setNoteValue('X');
             else if (e.key === 'Backspace' || e.key === 'Delete') setNoteValue(null);
-            else if (e.key === 'ArrowRight') { if (activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); } }
-            else if (e.key === 'ArrowLeft') { if (activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); } }
+            else if (e.key === 'ArrowRight') { if (activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); autoScrollToStep(activeCell.step); } }
+            else if (e.key === 'ArrowLeft') { if (activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); autoScrollToStep(activeCell.step); } }
             else if (e.key === 'ArrowUp') { if (activeCell.string !== null && activeCell.string > 0) { activeCell.string--; updateGridUI(); } }
             else if (e.key === 'ArrowDown') { if (activeCell.string !== null && activeCell.string < 5) { activeCell.string++; updateGridUI(); } }
             else if (e.key === ' ') { e.preventDefault(); togglePlayback(); }
@@ -888,6 +1017,10 @@
                 const rect = cell.getBoundingClientRect();
                 const contRect = document.getElementById('tab-grid-container').getBoundingClientRect();
                 cursor.style.left = `${rect.left - contRect.left + (rect.width / 2)}px`;
+                // Auto-scroll during playback on mobile
+                if (window.innerWidth < 1024) {
+                    autoScrollToStep(si);
+                }
             }
         }
 
@@ -897,7 +1030,6 @@
         document.getElementById('btn-remove-col').addEventListener('click', () => removeColumn());
         document.getElementById('btn-add-col-inline').addEventListener('click', () => addColumns(1));
 
-        // Add column buttons on each string row
         document.querySelectorAll('.string-add-btn').forEach(btn => {
             btn.addEventListener('click', () => addColumns(1));
         });
@@ -920,8 +1052,12 @@
         });
 
         // Navigation
-        document.getElementById('btn-prev-step').addEventListener('click', () => { if (activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); } });
-        document.getElementById('btn-next-step').addEventListener('click', () => { if (activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); } });
+        document.getElementById('btn-prev-step').addEventListener('click', () => { 
+            if (activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); autoScrollToStep(activeCell.step); } 
+        });
+        document.getElementById('btn-next-step').addEventListener('click', () => { 
+            if (activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); autoScrollToStep(activeCell.step); } 
+        });
 
         // BPM
         function adjustBPM(amount) {
@@ -1013,46 +1149,32 @@
             const projects = getSavedProjects();
             const pname = currentProjectId && projects[currentProjectId] ? projects[currentProjectId].name : 'TabCraft_Project';
             const filename = `${pname.replace(/\s+/g, '_')}.mid`;
-
             const ticksPerBeat = 480;
             const stepDurationTicks = ticksPerBeat / 4;
-            
             let midiData = [];
-            midiData.push(77, 84, 104, 100, 0, 0, 0, 6, 0, 1, 0, 2); // MThd, len 6, fmt 1, 2 tracks
+            midiData.push(77, 84, 104, 100, 0, 0, 0, 6, 0, 1, 0, 2);
             midiData.push(...numToBytes(ticksPerBeat, 2));
-
             let track1 = [];
             const microsecondsPerBeat = Math.floor(60000000 / bpm);
             track1.push(0x00, 0xFF, 0x51, 0x03, ...numToBytes(microsecondsPerBeat, 3));
             track1.push(0x00, 0xFF, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08);
             track1.push(0x00, 0xFF, 0x2F, 0x00);
-            
             midiData.push(77, 84, 114, 107);
             midiData.push(...numToBytes(track1.length, 4));
             midiData.push(...track1);
-
             let track2 = [];
             let events = [];
-            
             const openMidi = [64, 59, 55, 50, 45, 40];
-
             for (let str = 0; str < 6; str++) {
-                let lastNoteStart = -1;
-                let lastNotePitch = -1;
-
+                let lastNoteStart = -1, lastNotePitch = -1;
                 for (let step = 0; step <= currentCols; step++) {
                     let currentVal = (step < currentCols) ? tabData[str][step].val : null;
                     let isMute = (currentVal === 'X');
                     let isNewNote = (currentVal !== null && !isMute);
-                    let isEndOfSong = (step === currentCols);
-
-                    if (lastNoteStart !== -1) {
-                        if (isNewNote || isMute || isEndOfSong) {
-                            events.push({ tick: step * stepDurationTicks, type: 'off', note: lastNotePitch });
-                            lastNoteStart = -1; lastNotePitch = -1;
-                        }
+                    if (lastNoteStart !== -1 && (isNewNote || isMute || step === currentCols)) {
+                        events.push({ tick: step * stepDurationTicks, type: 'off', note: lastNotePitch });
+                        lastNoteStart = -1; lastNotePitch = -1;
                     }
-
                     if (isNewNote) {
                         const pitch = openMidi[str] + parseInt(currentVal);
                         lastNoteStart = step; lastNotePitch = pitch;
@@ -1060,64 +1182,39 @@
                     }
                 }
             }
-
-            events.sort((a, b) => {
-                if (a.tick !== b.tick) return a.tick - b.tick;
-                if (a.type === 'off' && b.type === 'on') return -1;
-                return 0;
-            });
-
+            events.sort((a, b) => { if (a.tick !== b.tick) return a.tick - b.tick; if (a.type === 'off' && b.type === 'on') return -1; return 0; });
             let absTick = 0;
             events.forEach(evt => {
-                const delta = evt.tick - absTick;
-                absTick = evt.tick;
+                const delta = evt.tick - absTick; absTick = evt.tick;
                 track2.push(...numToVariableLength(delta));
                 if (evt.type === 'on') { track2.push(0x90, evt.note, evt.velocity); }
                 else { track2.push(0x80, evt.note, 0x40); }
             });
             track2.push(0x00, 0xFF, 0x2F, 0x00);
-
             midiData.push(77, 84, 114, 107);
             midiData.push(...numToBytes(track2.length, 4));
             midiData.push(...track2);
-
             const blob = new Blob([new Uint8Array(midiData)], { type: 'audio/midi' });
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
             showToast("Arquivo MIDI gerado! 🎹", "music-2");
         }
-
-        function numToBytes(num, bytes) {
-            const arr = [];
-            for (let i = bytes - 1; i >= 0; i--) arr.push((num >> (i * 8)) & 0xFF);
-            return arr;
-        }
-        function numToVariableLength(num) {
-            const arr = []; let buffer = num & 0x7F;
-            while ((num >>= 7)) { buffer <<= 8; buffer |= ((num & 0x7F) | 0x80); }
-            while (true) { arr.push(buffer & 0xFF); if (buffer & 0x80) buffer >>= 8; else break; }
-            return arr;
-        }
-
+        function numToBytes(num, bytes) { const arr = []; for (let i = bytes - 1; i >= 0; i--) arr.push((num >> (i * 8)) & 0xFF); return arr; }
+        function numToVariableLength(num) { const arr = []; let buffer = num & 0x7F; while ((num >>= 7)) { buffer <<= 8; buffer |= ((num & 0x7F) | 0x80); } while (true) { arr.push(buffer & 0xFF); if (buffer & 0x80) buffer >>= 8; else break; } return arr; }
         document.getElementById('btn-download-midi').addEventListener('click', downloadMidi);
 
         // --- MP3 EXPORT ---
         async function exportToMp3() {
             if (typeof lamejs === 'undefined') {
                 showToast("Carregando biblioteca MP3...", "loader");
-                // Fallback load
                 const script = document.createElement('script');
                 script.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
                 script.onload = () => setTimeout(() => startMp3Render(), 200);
                 script.onerror = () => showToast("Falha ao carregar encoder.", "alert-triangle");
                 document.head.appendChild(script);
-            } else {
-                startMp3Render();
-            }
+            } else { startMp3Render(); }
         }
-
         async function startMp3Render() {
             showToast("Renderizando áudio...", "music");
             setTimeout(async () => {
@@ -1127,164 +1224,93 @@
                     const tailDuration = 4.5;
                     const totalDuration = songDuration + tailDuration;
                     const sampleRate = 44100;
-                    
                     const offlineCtx = new OfflineAudioContext(2, sampleRate * totalDuration, sampleRate);
                     const offlineActiveVoices = Array(6).fill(null);
-
-                    // Schedule offline notes
                     for (let step = 0; step < currentCols; step++) {
                         const stepTime = step * stepDuration;
                         for (let str = 0; str < 6; str++) {
                             const cd = tabData[str][step];
-                            if (cd && cd.val !== null) {
-                                scheduleOfflineNote(offlineCtx, stepTime, str, cd.val, cd.effect, offlineActiveVoices);
-                            }
+                            if (cd && cd.val !== null) scheduleOfflineNote(offlineCtx, stepTime, str, cd.val, cd.effect, offlineActiveVoices);
                         }
                     }
-                    
                     const audioBuffer = await offlineCtx.startRendering();
                     showToast("Codificando MP3...", "disc-2");
-                    
                     const mp3Blob = await encodeMP3Async(audioBuffer, 128);
-                    
                     const projects = getSavedProjects();
                     const pname = currentProjectId && projects[currentProjectId] ? projects[currentProjectId].name : 'TabCraft';
                     const filename = `${pname.replace(/\s+/g, '_').toLowerCase()}.mp3`;
-                    
                     const url = URL.createObjectURL(mp3Blob);
-                    const a = document.createElement('a');
-                    a.href = url; a.download = filename;
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
                     URL.revokeObjectURL(url);
-                    
                     showToast("MP3 exportado com sucesso!", "check-circle");
-                } catch (err) {
-                    console.error(err);
-                    showToast("Erro ao exportar áudio.", "alert-triangle");
-                }
+                } catch (err) { console.error(err); showToast("Erro ao exportar áudio.", "alert-triangle"); }
             }, 50);
         }
-
         function scheduleOfflineNote(ctx, startTime, si, fret, effect, activeVoices) {
             const frequency = getFretFrequency(si, fret);
             if (fret === 'X' || frequency === 0) {
-                if (activeVoices[si]) {
-                    activeVoices[si].gain.gain.setValueAtTime(activeVoices[si].gain.gain.value, startTime);
-                    activeVoices[si].gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.05);
-                    activeVoices[si].osc.stop(startTime + 0.1);
-                    activeVoices[si] = null;
-                }
+                if (activeVoices[si]) { activeVoices[si].gain.gain.setValueAtTime(activeVoices[si].gain.gain.value, startTime); activeVoices[si].gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.05); activeVoices[si].osc.stop(startTime + 0.1); activeVoices[si] = null; }
                 return;
             }
-
             const prevVoice = activeVoices[si];
-            if (effect === 'S' && prevVoice) {
-                prevVoice.osc.frequency.setValueAtTime(prevVoice.frequency, startTime);
-                prevVoice.osc.frequency.exponentialRampToValueAtTime(frequency, startTime + 0.18);
-                prevVoice.frequency = frequency;
-                prevVoice.currentFret = fret;
-                return;
-            }
-
-            if (prevVoice) {
-                prevVoice.gain.gain.setValueAtTime(prevVoice.gain.gain.value, startTime);
-                prevVoice.gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.05);
-                prevVoice.osc.stop(startTime + 0.1);
-            }
-
-            const stringGain = ctx.createGain();
-            stringGain.gain.setValueAtTime(0.001, startTime);
+            if (effect === 'S' && prevVoice) { prevVoice.osc.frequency.setValueAtTime(prevVoice.frequency, startTime); prevVoice.osc.frequency.exponentialRampToValueAtTime(frequency, startTime + 0.18); prevVoice.frequency = frequency; prevVoice.currentFret = fret; return; }
+            if (prevVoice) { prevVoice.gain.gain.setValueAtTime(prevVoice.gain.gain.value, startTime); prevVoice.gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.05); prevVoice.osc.stop(startTime + 0.1); }
+            const stringGain = ctx.createGain(); stringGain.gain.setValueAtTime(0.001, startTime);
             let maxDecay = 3.5, peakGain = 0.4;
-
             if (effect === 'H') { peakGain = 0.28; maxDecay = 3.0; stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.08); }
             else if (effect === 'P') { peakGain = 0.32; maxDecay = 2.8; stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.02); }
             else if (effect === 'T') { peakGain = 0.45; maxDecay = 0.8; stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.01); }
             else if (effect === 'N') { peakGain = 0.35; maxDecay = 4.5; stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.03); }
             else { stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.03); }
-
             stringGain.gain.exponentialRampToValueAtTime(peakGain * 0.3, startTime + 0.4);
             stringGain.gain.exponentialRampToValueAtTime(0.0001, startTime + maxDecay);
-
-            const osc = ctx.createOscillator();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(effect === 'N' ? frequency * 2 : frequency, startTime);
-
-            if (effect === 'V') {
-                const vOsc = ctx.createOscillator(); const vGain = ctx.createGain();
-                vOsc.frequency.setValueAtTime(6.0, startTime); vGain.gain.setValueAtTime(frequency * 0.03, startTime);
-                vOsc.connect(vGain); vGain.connect(osc.frequency); vOsc.start(startTime); vOsc.stop(startTime + maxDecay);
-            }
-
+            const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.setValueAtTime(effect === 'N' ? frequency * 2 : frequency, startTime);
+            if (effect === 'V') { const vOsc = ctx.createOscillator(); const vGain = ctx.createGain(); vOsc.frequency.setValueAtTime(6.0, startTime); vGain.gain.setValueAtTime(frequency * 0.03, startTime); vOsc.connect(vGain); vGain.connect(osc.frequency); vOsc.start(startTime); vOsc.stop(startTime + maxDecay); }
             const oscHarms = [];
-            const harmCfg = [
-                { type: 'sawtooth', factor: 2, gain: 0.08, decayFactor: 0.6 },
-                { type: 'triangle', factor: 3, gain: 0.04, decayFactor: 0.45 }
-            ];
-            const filter = ctx.createBiquadFilter();
-            filter.type = 'lowpass'; filter.frequency.setValueAtTime(2200, startTime);
-            osc.connect(filter);
-
-            harmCfg.forEach(cfg => {
-                const oH = ctx.createOscillator(); oH.type = cfg.type;
-                oH.frequency.setValueAtTime(frequency * cfg.factor, startTime);
-                const gH = ctx.createGain(); gH.gain.setValueAtTime(cfg.gain, startTime);
-                gH.gain.exponentialRampToValueAtTime(0.0001, startTime + (maxDecay * cfg.decayFactor));
-                oH.connect(gH); gH.connect(filter); oH.start(startTime); oscHarms.push(oH);
+            [{ type: 'sawtooth', factor: 2, gain: 0.08, decayFactor: 0.6 }, { type: 'triangle', factor: 3, gain: 0.04, decayFactor: 0.45 }].forEach(cfg => {
+                const oH = ctx.createOscillator(); oH.type = cfg.type; oH.frequency.setValueAtTime(frequency * cfg.factor, startTime);
+                const gH = ctx.createGain(); gH.gain.setValueAtTime(cfg.gain, startTime); gH.gain.exponentialRampToValueAtTime(0.0001, startTime + (maxDecay * cfg.decayFactor));
+                oH.connect(gH); gH.connect(ctx.createBiquadFilter()); ctx.createBiquadFilter(); oH.start(startTime); oscHarms.push(oH);
             });
-
-            // Percussive attack noise
             if (effect !== 'H' && effect !== 'P') {
-                const nBuf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
-                const nData = nBuf.getChannelData(0);
+                const nBuf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate); const nData = nBuf.getChannelData(0);
                 for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
                 const nNode = ctx.createBufferSource(); nNode.buffer = nBuf;
                 const nFilter = ctx.createBiquadFilter(); nFilter.type = 'bandpass'; nFilter.frequency.setValueAtTime(800, startTime);
-                const nGain = ctx.createGain(); nGain.gain.setValueAtTime(0.08, startTime);
-                nGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
+                const nGain = ctx.createGain(); nGain.gain.setValueAtTime(0.08, startTime); nGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
                 nNode.connect(nFilter); nFilter.connect(nGain); nGain.connect(stringGain); nNode.start(startTime);
             }
-
-            filter.connect(stringGain); stringGain.connect(ctx.destination);
+            const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(2200, startTime);
+            osc.connect(filter); filter.connect(stringGain); stringGain.connect(ctx.destination);
             osc.start(startTime); osc.stop(startTime + maxDecay + 0.5);
-
             activeVoices[si] = { osc, gain: stringGain, frequency, currentFret: fret };
         }
-
         async function encodeMP3Async(audioBuffer, kbps) {
             return new Promise(resolve => {
                 const channels = audioBuffer.numberOfChannels;
                 const sampleRate = audioBuffer.sampleRate;
                 const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, kbps);
                 const mp3Data = [];
-                
                 const left = audioBuffer.getChannelData(0);
                 const right = channels > 1 ? audioBuffer.getChannelData(1) : left;
                 const blockLen = 1152;
                 const len = audioBuffer.length;
-                
                 let i = 0;
                 function processChunk() {
                     const end = Math.min(i + blockLen, len);
-                    const l = left.subarray(i, end);
-                    const r = right.subarray(i, end);
+                    const l = left.subarray(i, end); const r = right.subarray(i, end);
                     const mp3buf = mp3encoder.encodeBuffer(l, r, l.length);
                     if (mp3buf.length > 0) mp3Data.push(mp3buf);
-                    
                     i = end;
-                    if (i < len) {
-                        setTimeout(processChunk, 0); // Non-blocking
-                    } else {
-                        mp3Data.push(mp3encoder.flush());
-                        resolve(new Blob(mp3Data, { type: 'audio/mp3' }));
-                    }
+                    if (i < len) { setTimeout(processChunk, 0); }
+                    else { mp3Data.push(mp3encoder.flush()); resolve(new Blob(mp3Data, { type: 'audio/mp3' })); }
                 }
                 processChunk();
             });
         }
-
         document.getElementById('btn-download-mp3').addEventListener('click', exportToMp3);
 
-        // PDF Export
+        // PDF
         document.getElementById('btn-download-pdf').addEventListener('click', () => {
             const { jsPDF } = window.jspdf;
             const isLand = currentCols > 16;
@@ -1336,20 +1362,12 @@
             const tp = params.get('tab');
             if (tp) {
                 try {
-                    const decoded = atob(tp);
-                    const parts = decoded.split('|');
+                    const decoded = atob(tp); const parts = decoded.split('|');
                     for (let str = 0; str < 6; str++) { for (let step = 0; step < 999; step++) tabData[str][step] = { val: null, effect: "" }; }
-                    parts.forEach(p => {
-                        const [str, step, val, effect] = p.split(',');
-                        const s = parseInt(str), st = parseInt(step);
-                        tabData[s][st] = { val: val === 'X' ? 'X' : parseInt(val), effect: effect === 'none' ? '' : effect };
-                    });
-                    let maxStep = 0;
-                    parts.forEach(p => { const [, step] = p.split(','); maxStep = Math.max(maxStep, parseInt(step)); });
+                    parts.forEach(p => { const [str, step, val, effect] = p.split(','); const s = parseInt(str), st = parseInt(step); tabData[s][st] = { val: val === 'X' ? 'X' : parseInt(val), effect: effect === 'none' ? '' : effect }; });
+                    let maxStep = 0; parts.forEach(p => { const [, step] = p.split(','); maxStep = Math.max(maxStep, parseInt(step)); });
                     currentCols = Math.min(999, maxStep + 20);
-                    document.getElementById('cols-input').value = currentCols;
-                    initializeGrid();
-                    showToast("Tab compartilhada carregada!");
+                    document.getElementById('cols-input').value = currentCols; initializeGrid(); showToast("Tab compartilhada carregada!");
                 } catch(e) {}
             }
         }
@@ -1365,6 +1383,40 @@
             if (toastTimeout) clearTimeout(toastTimeout);
             toastTimeout = setTimeout(() => { toast.classList.remove('translate-y-0', 'opacity-100'); toast.classList.add('translate-y-20', 'opacity-0'); }, 3000);
         }
+
+        // --- TOUCH SWIPE NAVIGATION ---
+        let touchStartX = 0;
+        let touchStartY = 0;
+        const gridContainer = document.getElementById('tab-grid-container');
+        
+        gridContainer.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        gridContainer.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+            
+            // Only handle horizontal swipes (more horizontal than vertical)
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 40) {
+                if (deltaX < 0 && activeCell.step !== null && activeCell.step < currentCols - 1) {
+                    // Swipe left -> next step
+                    activeCell.step++;
+                    updateGridUI();
+                    autoScrollToStep(activeCell.step);
+                    showToast("→ Tempo " + (activeCell.step + 1));
+                } else if (deltaX > 0 && activeCell.step !== null && activeCell.step > 0) {
+                    // Swipe right -> previous step
+                    activeCell.step--;
+                    updateGridUI();
+                    autoScrollToStep(activeCell.step);
+                    showToast("← Tempo " + (activeCell.step + 1));
+                }
+            }
+        }, { passive: true });
 
         // Event listeners
         document.getElementById('btn-save-project').addEventListener('click', openSaveModal);
