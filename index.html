@@ -160,6 +160,7 @@
                 </div>
 
                 <div class="mt-3 sm:mt-4 flex flex-wrap gap-2 sm:gap-3">
+                    <button id="btn-import-midi" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-cyan-500/10"><i data-lucide="upload-cloud" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>Importar .MIDI</button>
                     <button id="btn-export-text" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95"><i data-lucide="file-text" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400"></i>Texto</button>
                     <button id="btn-download-txt" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-emerald-500/10"><i data-lucide="download" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>.TXT</button>
                     <button id="btn-download-midi" class="px-3 py-2 sm:px-4 sm:py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition active:scale-95 shadow-lg shadow-violet-500/10"><i data-lucide="music-2" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>.MIDI</button>
@@ -181,6 +182,8 @@
             </div>
         </section>
     </main>
+
+    <input type="file" id="midi-file-input" accept=".mid,.midi" hidden>
 
     <div id="library-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-slate-950 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl flex flex-col gap-4">
@@ -215,239 +218,123 @@
         const STRING_FREQS = [329.63, 246.94, 196.00, 146.83, 110.00, 82.41];
         const activeVoices = Array(6).fill(null);
 
-        function getFretFrequency(si, fret) {
-            if (fret === 'X' || fret === null || fret === undefined) return 0;
-            return STRING_FREQS[si] * Math.pow(2, fret / 12);
-        }
-
+        function getFretFrequency(si, fret) { if (fret === 'X' || fret === null || fret === undefined) return 0; return STRING_FREQS[si] * Math.pow(2, fret / 12); }
         function dampString(si, delayTime = 0) {
-            const voice = activeVoices[si];
-            if (voice) {
-                const now = audioCtx.currentTime + delayTime;
-                try {
-                    voice.gainNode.gain.cancelScheduledValues(now);
-                    voice.gainNode.gain.setValueAtTime(voice.gainNode.gain.value, now);
-                    voice.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
-                    setTimeout(() => { try { voice.oscFundamental.stop(); voice.oscHarmonics.forEach(o => o.stop()); } catch(e) {} }, 80);
-                } catch(e) {}
-                activeVoices[si] = null;
-                const row = document.querySelector(`.string-row[data-string="${si}"]`);
-                if (row) row.classList.remove('string-vibrating');
-            }
+            const voice = activeVoices[si]; if (!voice) return; const now = audioCtx.currentTime + delayTime;
+            try { voice.gainNode.gain.cancelScheduledValues(now); voice.gainNode.gain.setValueAtTime(voice.gainNode.gain.value, now); voice.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.05); setTimeout(() => { try { voice.oscFundamental.stop(); voice.oscHarmonics.forEach(o => o.stop()); } catch(e) {} }, 80); } catch(e) {}
+            activeVoices[si] = null; const row = document.querySelector(`.string-row[data-string="${si}"]`); if (row) row.classList.remove('string-vibrating');
         }
 
         function triggerGuitarNote(si, fret, effect = "", delayTime = 0) {
-            const frequency = getFretFrequency(si, fret);
-            const now = audioCtx.currentTime + delayTime;
+            const frequency = getFretFrequency(si, fret); const now = audioCtx.currentTime + delayTime;
             if (fret === 'X') { dampString(si, delayTime); playMutePercussion(si, now); return; }
-            if (frequency === 0) return;
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-
+            if (frequency === 0) return; if (audioCtx.state === 'suspended') audioCtx.resume();
             const prevVoice = activeVoices[si];
             if (effect === 'S' && prevVoice && prevVoice.frequency > 0) {
-                const pf = prevVoice.frequency;
-                prevVoice.oscFundamental.frequency.setValueAtTime(pf, now);
-                prevVoice.oscFundamental.frequency.exponentialRampToValueAtTime(frequency, now + 0.18);
-                prevVoice.oscHarmonics.forEach((osc, idx) => {
-                    const hf = idx + 2;
-                    osc.frequency.setValueAtTime(pf * hf, now);
-                    osc.frequency.exponentialRampToValueAtTime(frequency * hf, now + 0.18);
-                });
+                const pf = prevVoice.frequency; prevVoice.oscFundamental.frequency.setValueAtTime(pf, now); prevVoice.oscFundamental.frequency.exponentialRampToValueAtTime(frequency, now + 0.18);
+                prevVoice.oscHarmonics.forEach((osc, idx) => { osc.frequency.setValueAtTime(pf * (idx + 2), now); osc.frequency.exponentialRampToValueAtTime(frequency * (idx + 2), now + 0.18); });
                 prevVoice.frequency = frequency; prevVoice.currentFret = fret; return;
             }
-            dampString(si, delayTime);
-
-            const stringGain = audioCtx.createGain();
-            stringGain.gain.setValueAtTime(0.001, now);
+            dampString(si, delayTime); const stringGain = audioCtx.createGain(); stringGain.gain.setValueAtTime(0.001, now);
             let maxDecay = 3.5, peakGain = 0.4;
-
             if (effect === 'H') { peakGain = 0.28; maxDecay = 3.0; stringGain.gain.exponentialRampToValueAtTime(peakGain, now + 0.08); }
             else if (effect === 'P') { peakGain = 0.32; maxDecay = 2.8; stringGain.gain.exponentialRampToValueAtTime(peakGain, now + 0.02); }
             else if (effect === 'T') { peakGain = 0.45; maxDecay = 0.8; stringGain.gain.exponentialRampToValueAtTime(peakGain, now + 0.01); }
             else if (effect === 'N') { peakGain = 0.35; maxDecay = 4.5; stringGain.gain.exponentialRampToValueAtTime(peakGain, now + 0.03); }
             else { stringGain.gain.exponentialRampToValueAtTime(peakGain, now + 0.03); }
-
-            stringGain.gain.exponentialRampToValueAtTime(peakGain * 0.3, now + 0.4);
-            stringGain.gain.exponentialRampToValueAtTime(0.0001, now + maxDecay);
-
-            const oscFund = audioCtx.createOscillator();
-            oscFund.type = 'triangle';
-            oscFund.frequency.setValueAtTime(effect === 'N' ? frequency * 2 : frequency, now);
-
-            if (effect === 'V') {
-                const vOsc = audioCtx.createOscillator(); const vGain = audioCtx.createGain();
-                vOsc.frequency.setValueAtTime(6.0, now); vGain.gain.setValueAtTime(frequency * 0.03, now);
-                vOsc.connect(vGain); vGain.connect(oscFund.frequency); vOsc.start(now);
-                setTimeout(() => { try { vOsc.stop(); } catch(e) {} }, maxDecay * 1000);
-            }
-
-            const oscHarms = [];
-            const harmCfg = [
-                { type: 'sawtooth', factor: 2, gain: 0.08, decayFactor: 0.6 },
-                { type: 'triangle', factor: 3, gain: 0.04, decayFactor: 0.45 }
-            ];
-            const filter = audioCtx.createBiquadFilter();
-            filter.type = 'lowpass'; filter.frequency.setValueAtTime(2200, now);
-            oscFund.connect(filter);
-
-            harmCfg.forEach(cfg => {
-                const oH = audioCtx.createOscillator(); oH.type = cfg.type;
-                oH.frequency.setValueAtTime(frequency * cfg.factor, now);
-                const gH = audioCtx.createGain(); gH.gain.setValueAtTime(cfg.gain, now);
-                gH.gain.exponentialRampToValueAtTime(0.0001, now + (maxDecay * cfg.decayFactor));
+            stringGain.gain.exponentialRampToValueAtTime(peakGain * 0.3, now + 0.4); stringGain.gain.exponentialRampToValueAtTime(0.0001, now + maxDecay);
+            const oscFund = audioCtx.createOscillator(); oscFund.type = 'triangle'; oscFund.frequency.setValueAtTime(effect === 'N' ? frequency * 2 : frequency, now);
+            if (effect === 'V') { const vOsc = audioCtx.createOscillator(); const vGain = audioCtx.createGain(); vOsc.frequency.setValueAtTime(6.0, now); vGain.gain.setValueAtTime(frequency * 0.03, now); vOsc.connect(vGain); vGain.connect(oscFund.frequency); vOsc.start(now); setTimeout(() => { try { vOsc.stop(); } catch(e) {} }, maxDecay * 1000); }
+            const oscHarms = []; const filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(2200, now); oscFund.connect(filter);
+            [{ type: 'sawtooth', factor: 2, gain: 0.08, decayFactor: 0.6 }, { type: 'triangle', factor: 3, gain: 0.04, decayFactor: 0.45 }].forEach(cfg => {
+                const oH = audioCtx.createOscillator(); oH.type = cfg.type; oH.frequency.setValueAtTime(frequency * cfg.factor, now);
+                const gH = audioCtx.createGain(); gH.gain.setValueAtTime(cfg.gain, now); gH.gain.exponentialRampToValueAtTime(0.0001, now + (maxDecay * cfg.decayFactor));
                 oH.connect(gH); gH.connect(filter); oH.start(now); oscHarms.push(oH);
             });
-
             if (effect !== 'H' && effect !== 'P') {
-                const nBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.04, audioCtx.sampleRate);
-                const nData = nBuf.getChannelData(0);
-                for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
-                const nNode = audioCtx.createBufferSource(); nNode.buffer = nBuf;
-                const nFilter = audioCtx.createBiquadFilter(); nFilter.type = 'bandpass'; nFilter.frequency.setValueAtTime(800, now);
-                const nGain = audioCtx.createGain(); nGain.gain.setValueAtTime(0.08, now);
-                nGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+                const nBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.04, audioCtx.sampleRate); const nData = nBuf.getChannelData(0);
+                for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1; const nNode = audioCtx.createBufferSource(); nNode.buffer = nBuf;
+                const nFilter = audioCtx.createBiquadFilter(); nFilter.type = 'bandpass'; nFilter.frequency.setValueAtTime(800, now); const nGain = audioCtx.createGain(); nGain.gain.setValueAtTime(0.08, now); nGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
                 nNode.connect(nFilter); nFilter.connect(nGain); nGain.connect(stringGain); nNode.start(now);
             }
-
             filter.connect(stringGain); stringGain.connect(audioCtx.destination); oscFund.start(now);
             activeVoices[si] = { gainNode: stringGain, oscFundamental: oscFund, oscHarmonics: oscHarms, frequency, currentFret: fret };
-            const row = document.querySelector(`.string-row[data-string="${si}"]`);
-            if (row) row.classList.add('string-vibrating');
+            const row = document.querySelector(`.string-row[data-string="${si}"]`); if (row) row.classList.add('string-vibrating');
             setTimeout(() => { try { if (activeVoices[si] && activeVoices[si].oscFundamental === oscFund) dampString(si); } catch(e) {} }, maxDecay * 1000);
         }
 
         function playMutePercussion(si, now) {
-            const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
-            const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-            const src = audioCtx.createBufferSource(); src.buffer = buf;
-            const flt = audioCtx.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.setValueAtTime(150, now);
-            const gn = audioCtx.createGain(); gn.gain.setValueAtTime(0.15, now); gn.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
-            src.connect(flt); flt.connect(gn); gn.connect(audioCtx.destination); src.start(now);
+            const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate); const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+            const src = audioCtx.createBufferSource(); src.buffer = buf; const flt = audioCtx.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.setValueAtTime(150, now);
+            const gn = audioCtx.createGain(); gn.gain.setValueAtTime(0.15, now); gn.gain.exponentialRampToValueAtTime(0.0001, now + 0.04); src.connect(flt); flt.connect(gn); gn.connect(audioCtx.destination); src.start(now);
         }
 
         // --- STATE ---
-        let currentCols = 16;
-        let bpm = 100;
-        let isPlaying = false;
-        let currentStep = 0;
-        let playbackInterval = null;
+        let currentCols = 16, bpm = 100, isPlaying = false, currentStep = 0, playbackInterval = null;
         let activeCell = { string: null, step: null };
         let tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" })));
-        let currentProjectId = null;
-        let isDirty = false;
+        let currentProjectId = null, isDirty = false;
 
-        // --- AUTO SCROLL ---
         function autoScrollToStep(stepIndex) {
-            const container = document.getElementById('tab-scroll-container');
-            if (!container) return;
-            const cell = document.querySelector(`.string-steps[data-string="0"] [data-step="${stepIndex}"]`);
-            if (!cell) return;
-            const containerRect = container.getBoundingClientRect();
-            const cellRect = cell.getBoundingClientRect();
-            const targetCenter = cellRect.left + cellRect.width / 2;
-            const containerCenter = containerRect.left + containerRect.width / 2;
-            container.scrollBy({ left: targetCenter - containerCenter, behavior: 'smooth' });
+            const container = document.getElementById('tab-scroll-container'); if (!container) return;
+            const cell = document.querySelector(`.string-steps[data-string="0"] [data-step="${stepIndex}"]`); if (!cell) return;
+            const cRect = container.getBoundingClientRect(); const cellRect = cell.getBoundingClientRect();
+            container.scrollBy({ left: (cellRect.left + cellRect.width / 2) - (cRect.left + cRect.width / 2), behavior: 'smooth' });
         }
 
         // --- SAVE SYSTEM ---
-        function getSavedProjects() {
-            try { return JSON.parse(localStorage.getItem('tabcraft_projects') || '{}'); } catch(e) { return {}; }
-        }
-        function saveProjectsToStorage(projects) { localStorage.setItem('tabcraft_projects', JSON.stringify(projects)); }
-
+        function getSavedProjects() { try { return JSON.parse(localStorage.getItem('tabcraft_projects') || '{}'); } catch(e) { return {}; } }
+        function saveProjectsToStorage(p) { localStorage.setItem('tabcraft_projects', JSON.stringify(p)); }
         function saveProject(name) {
-            const projects = getSavedProjects();
-            const id = currentProjectId || 'proj_' + Date.now();
-            const now = new Date().toISOString();
-            projects[id] = { id, name: name || 'Sem nome', createdAt: projects[id] ? projects[id].createdAt : now, updatedAt: now, bpm, cols: currentCols, data: tabData.map(row => row.slice(0, currentCols)) };
-            saveProjectsToStorage(projects);
-            currentProjectId = id; isDirty = false;
-            updateProjectStatus(name || 'Sem nome', false);
-            showToast(`"${name || 'Sem nome'}" salvo!`, "check-circle");
+            const p = getSavedProjects(); const id = currentProjectId || 'proj_' + Date.now(); const now = new Date().toISOString();
+            p[id] = { id, name: name || 'Sem nome', createdAt: p[id] ? p[id].createdAt : now, updatedAt: now, bpm, cols: currentCols, data: tabData.map(row => row.slice(0, currentCols)) };
+            saveProjectsToStorage(p); currentProjectId = id; isDirty = false; updateProjectStatus(name || 'Sem nome', false); showToast(`"${name || 'Sem nome'}" salvo!`, "check-circle");
         }
-
         function loadProject(id) {
-            const projects = getSavedProjects();
-            const proj = projects[id];
-            if (!proj) { showToast("Projeto não encontrado!", "alert-circle"); return; }
-            stopPlayback();
-            currentProjectId = id; bpm = proj.bpm || 100; currentCols = proj.cols || 16;
+            const p = getSavedProjects(); const proj = p[id]; if (!proj) { showToast("Projeto não encontrado!", "alert-circle"); return; }
+            stopPlayback(); currentProjectId = id; bpm = proj.bpm || 100; currentCols = proj.cols || 16;
             tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" })));
-            proj.data.forEach((row, si) => { row.forEach((cell, st) => { if (st < 999) tabData[si][st] = { val: cell.val, effect: cell.effect || "" }; }); });
-            document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = currentCols;
-            initializeGrid(); updateProjectStatus(proj.name, false); closeLibrary();
-            showToast(`"${proj.name}" carregado!`, "folder-open");
+            proj.data.forEach((row, si) => row.forEach((cell, st) => { if (st < 999) tabData[si][st] = { val: cell.val, effect: cell.effect || "" }; }));
+            document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = currentCols; initializeGrid(); updateProjectStatus(proj.name, false); closeLibrary(); showToast(`"${proj.name}" carregado!`, "folder-open");
         }
-
         function duplicateProject(id) {
-            const projects = getSavedProjects();
-            const orig = projects[id]; if (!orig) return;
-            const newId = 'proj_' + Date.now(); const now = new Date().toISOString();
-            projects[newId] = { id: newId, name: orig.name + ' (Cópia)', createdAt: now, updatedAt: now, bpm: orig.bpm, cols: orig.cols, data: orig.data.map(row => row.map(cell => ({ val: cell.val, effect: cell.effect }))) };
-            saveProjectsToStorage(projects); renderProjectsList();
-            showToast(`"${orig.name}" duplicado!`, "copy");
+            const p = getSavedProjects(); const orig = p[id]; if (!orig) return; const newId = 'proj_' + Date.now();
+            p[newId] = { id: newId, name: orig.name + ' (Cópia)', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), bpm: orig.bpm, cols: orig.cols, data: orig.data.map(row => row.map(c => ({ val: c.val, effect: c.effect }))) };
+            saveProjectsToStorage(p); renderProjectsList(); showToast(`"${orig.name}" duplicado!`, "copy");
         }
-
         function deleteProject(id) {
-            const projects = getSavedProjects(); const pname = projects[id] ? projects[id].name : 'Projeto';
-            delete projects[id]; saveProjectsToStorage(projects);
-            if (currentProjectId === id) { currentProjectId = null; updateProjectStatus('Novo Projeto', true); }
-            renderProjectsList(); showToast(`"${pname}" excluído.`, "trash-2");
+            const p = getSavedProjects(); const pname = p[id] ? p[id].name : 'Projeto'; delete p[id]; saveProjectsToStorage(p);
+            if (currentProjectId === id) { currentProjectId = null; updateProjectStatus('Novo Projeto', true); } renderProjectsList(); showToast(`"${pname}" excluído.`, "trash-2");
         }
+        function newProject() { stopPlayback(); currentProjectId = null; tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" }))); bpm = 100; currentCols = 16; document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = 16; initializeGrid(); activeCell = { string: null, step: null }; updateProjectStatus('Novo Projeto', true); closeLibrary(); showToast("Novo projeto criado!", "file-plus"); }
+        function updateProjectStatus(name, isNew) { const bar = document.getElementById('project-status-bar'); bar.classList.remove('hidden'); bar.classList.add('flex'); document.getElementById('current-project-name').textContent = name; document.getElementById('save-status-dot').className = `w-2 h-2 rounded-full animate-pulse ${isNew ? 'bg-amber-400' : 'bg-emerald-400'}`; }
+        function markDirty() { if (currentProjectId) { isDirty = true; document.getElementById('save-status-dot').className = 'w-2 h-2 rounded-full animate-pulse bg-amber-400'; } }
 
-        function newProject() {
-            stopPlayback(); currentProjectId = null;
-            tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" })));
-            bpm = 100; currentCols = 16;
-            document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = 16;
-            initializeGrid(); activeCell = { string: null, step: null }; updateProjectStatus('Novo Projeto', true); closeLibrary();
-            showToast("Novo projeto criado!", "file-plus");
-        }
-
-        function updateProjectStatus(name, isNew) {
-            const bar = document.getElementById('project-status-bar'); bar.classList.remove('hidden'); bar.classList.add('flex');
-            document.getElementById('current-project-name').textContent = name;
-            document.getElementById('save-status-dot').className = `w-2 h-2 rounded-full animate-pulse ${isNew ? 'bg-amber-400' : 'bg-emerald-400'}`;
-        }
-        function markDirty() {
-            if (currentProjectId) { isDirty = true; document.getElementById('save-status-dot').className = 'w-2 h-2 rounded-full animate-pulse bg-amber-400'; }
-        }
-
-        // --- LIBRARY ---
         function openLibrary() { renderProjectsList(); document.getElementById('library-modal').classList.remove('hidden'); }
         function closeLibrary() { document.getElementById('library-modal').classList.add('hidden'); }
         function renderProjectsList() {
-            const projects = getSavedProjects(); const listEl = document.getElementById('projects-list'); const keys = Object.keys(projects);
+            const p = getSavedProjects(); const listEl = document.getElementById('projects-list'); const keys = Object.keys(p);
             if (keys.length === 0) { listEl.innerHTML = '<div class="text-center py-8 text-slate-500 text-sm">Nenhum projeto salvo.</div>'; return; }
-            keys.sort((a, b) => new Date(projects[b].updatedAt) - new Date(projects[a].updatedAt));
+            keys.sort((a, b) => new Date(p[b].updatedAt) - new Date(p[a].updatedAt));
             let html = `<button onclick="newProject()" class="project-card w-full flex items-center gap-3 p-3 bg-slate-900/40 hover:bg-slate-900/70 border border-dashed border-slate-700 hover:border-indigo-500/40 rounded-2xl transition group"><div class="w-10 h-10 rounded-xl bg-slate-800 group-hover:bg-indigo-500/20 flex items-center justify-center flex-shrink-0 transition"><i data-lucide="plus" class="w-5 h-5 text-slate-400 group-hover:text-indigo-400"></i></div><div class="text-left"><span class="text-sm font-bold text-slate-300 group-hover:text-indigo-400 transition">Novo Projeto</span></div></button>`;
             keys.forEach(key => {
-                const p = projects[key]; const updated = new Date(p.updatedAt).toLocaleDateString('pt-BR');
-                const isCurrent = currentProjectId === key;
-                html += `<div class="project-card bg-slate-900/70 rounded-2xl border ${isCurrent ? 'border-indigo-500/40 bg-indigo-950/20' : 'border-slate-800'} p-3 flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl ${isCurrent ? 'bg-indigo-500' : 'bg-slate-800'} flex items-center justify-center flex-shrink-0"><i data-lucide="${isCurrent ? 'music-4' : 'file-text'}" class="w-5 h-5 ${isCurrent ? 'text-white' : 'text-slate-400'}"></i></div>
-                    <div class="flex-1 min-w-0"><span class="text-sm font-bold text-slate-200 truncate block">${p.name}</span><span class="text-[10px] text-slate-500">${updated} • ${p.bpm} BPM</span></div>
-                    <div class="flex items-center gap-1"><button onclick="loadProject('${key}')" class="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition"><i data-lucide="upload" class="w-3.5 h-3.5"></i></button><button onclick="duplicateProject('${key}')" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button><button onclick="deleteProject('${key}')" class="p-1.5 bg-rose-950/50 hover:bg-rose-900 text-rose-400 rounded-lg transition"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div></div>`;
-            });
-            listEl.innerHTML = html; lucide.createIcons();
+                const proj = p[key]; const updated = new Date(proj.updatedAt).toLocaleDateString('pt-BR'); const isCurrent = currentProjectId === key;
+                html += `<div class="project-card bg-slate-900/70 rounded-2xl border ${isCurrent ? 'border-indigo-500/40 bg-indigo-950/20' : 'border-slate-800'} p-3 flex items-center gap-3"><div class="w-10 h-10 rounded-xl ${isCurrent ? 'bg-indigo-500' : 'bg-slate-800'} flex items-center justify-center flex-shrink-0"><i data-lucide="${isCurrent ? 'music-4' : 'file-text'}" class="w-5 h-5 ${isCurrent ? 'text-white' : 'text-slate-400'}"></i></div><div class="flex-1 min-w-0"><span class="text-sm font-bold text-slate-200 truncate block">${proj.name}</span><span class="text-[10px] text-slate-500">${updated} • ${proj.bpm} BPM</span></div><div class="flex items-center gap-1"><button onclick="loadProject('${key}')" class="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition"><i data-lucide="upload" class="w-3.5 h-3.5"></i></button><button onclick="duplicateProject('${key}')" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button><button onclick="deleteProject('${key}')" class="p-1.5 bg-rose-950/50 hover:bg-rose-900 text-rose-400 rounded-lg transition"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div></div>`;
+            }); listEl.innerHTML = html; lucide.createIcons();
         }
 
-        // --- SAVE MODAL ---
-        function openSaveModal() { const projects = getSavedProjects(); document.getElementById('project-name-input').value = (currentProjectId && projects[currentProjectId]) ? projects[currentProjectId].name : ''; document.getElementById('save-name-modal').classList.remove('hidden'); setTimeout(() => document.getElementById('project-name-input').focus(), 100); }
+        function openSaveModal() { const p = getSavedProjects(); document.getElementById('project-name-input').value = (currentProjectId && p[currentProjectId]) ? p[currentProjectId].name : ''; document.getElementById('save-name-modal').classList.remove('hidden'); setTimeout(() => document.getElementById('project-name-input').focus(), 100); }
         function closeSaveModal() { document.getElementById('save-name-modal').classList.add('hidden'); }
         function confirmSave() { const name = document.getElementById('project-name-input').value.trim(); if (!name) { showToast("Digite um nome!", "alert-circle"); return; } saveProject(name); closeSaveModal(); }
 
         // --- GRID ---
         function ensureDataCapacity(cols) { if (cols > tabData[0].length) tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" }))); }
-
         function initializeGrid() {
             ensureDataCapacity(currentCols);
             document.querySelectorAll('.string-steps').forEach(container => {
-                container.innerHTML = '';
-                const si = parseInt(container.getAttribute('data-string'));
+                container.innerHTML = ''; const si = parseInt(container.getAttribute('data-string'));
                 for (let step = 0; step < currentCols; step++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-800 bg-slate-900/90 flex items-center justify-center cursor-pointer font-bold text-xs transition relative group z-10';
+                    const cell = document.createElement('div'); cell.className = 'w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-800 bg-slate-900/90 flex items-center justify-center cursor-pointer font-bold text-xs transition relative group z-10';
                     cell.setAttribute('data-string', si); cell.setAttribute('data-step', step);
                     const innerText = document.createElement('span'); innerText.className = 'cell-text text-slate-500 hover:text-white'; innerText.innerText = '-'; cell.appendChild(innerText);
                     const badge = document.createElement('span'); badge.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 rounded-md hidden shadow-sm'; cell.appendChild(badge);
@@ -460,462 +347,352 @@
             for (let step = 0; step < currentCols; step++) { const tick = document.createElement('div'); tick.className = `w-8 sm:w-9 text-center text-[10px] font-extrabold ${step % 4 === 0 ? 'text-indigo-400' : 'text-slate-600'}`; tick.innerText = (step + 1); timelineCols.appendChild(tick); }
             updateGridUI();
         }
-
         function addCellTapAnimation(cellEl, hasNote) { cellEl.classList.remove('cell-tap-active', 'cell-tap-empty'); void cellEl.offsetWidth; cellEl.classList.add(hasNote ? 'cell-tap-active' : 'cell-tap-empty'); setTimeout(() => cellEl.classList.remove('cell-tap-active', 'cell-tap-empty'), 300); }
-
-        function handleCellSelect(si, step) {
-            activeCell.string = si; activeCell.step = step;
-            const cd = tabData[si][step];
-            if (cd && cd.val !== null) triggerGuitarNote(si, cd.val, cd.effect);
-            updateGridUI();
-            if (window.innerWidth < 1024) autoScrollToStep(step);
-        }
-
+        function handleCellSelect(si, step) { activeCell.string = si; activeCell.step = step; const cd = tabData[si][step]; if (cd && cd.val !== null) triggerGuitarNote(si, cd.val, cd.effect); updateGridUI(); if (window.innerWidth < 1024) autoScrollToStep(step); }
         function updateGridUI() {
-            for (let str = 0; str < 6; str++) {
-                for (let step = 0; step < currentCols; step++) {
-                    const cell = document.querySelector(`.string-steps[data-string="${str}"] [data-step="${step}"]`);
-                    if (!cell) continue;
-                    const data = tabData[str][step]; const textEl = cell.querySelector('.cell-text'); const badgeEl = cell.querySelector('.effect-badge');
-                    cell.className = 'w-8 h-8 sm:w-9 sm:h-9 rounded-full border bg-slate-900 flex items-center justify-center cursor-pointer font-bold text-xs transition relative group z-10';
-                    textEl.className = 'cell-text';
-                    if (activeCell.string === str && activeCell.step === step) { cell.classList.add('border-indigo-500', 'bg-indigo-950/40', 'ring-2', 'ring-indigo-400/40'); textEl.classList.add('text-indigo-400'); }
-                    else { cell.classList.add('border-slate-800/80'); }
-                    if (data && data.val !== null) {
-                        textEl.innerText = data.val; textEl.classList.remove('text-slate-500');
-                        if (data.val === 'X') { cell.classList.add('bg-rose-950/20', 'border-rose-900/40'); textEl.classList.add('text-rose-400'); }
-                        else { cell.classList.add('bg-slate-800', 'border-slate-600'); textEl.classList.add('text-white'); }
-                    } else { textEl.innerText = '-'; textEl.classList.add('text-slate-600'); }
-                    if (data && data.effect) {
-                        badgeEl.innerText = data.effect; badgeEl.classList.remove('hidden');
-                        if (data.effect === 'H') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-orange-500 text-white';
-                        else if (data.effect === 'P') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-cyan-500 text-slate-950';
-                        else if (data.effect === 'S') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-purple-500 text-white';
-                        else if (data.effect === 'T') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-emerald-500 text-slate-950';
-                        else if (data.effect === 'N') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-yellow-500 text-slate-950';
-                        else if (data.effect === 'V') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-pink-500 text-white';
-                    } else { badgeEl.classList.add('hidden'); }
-                }
-            }
+            for (let str = 0; str < 6; str++) { for (let step = 0; step < currentCols; step++) {
+                const cell = document.querySelector(`.string-steps[data-string="${str}"] [data-step="${step}"]`); if (!cell) continue;
+                const data = tabData[str][step]; const textEl = cell.querySelector('.cell-text'); const badgeEl = cell.querySelector('.effect-badge');
+                cell.className = 'w-8 h-8 sm:w-9 sm:h-9 rounded-full border bg-slate-900 flex items-center justify-center cursor-pointer font-bold text-xs transition relative group z-10'; textEl.className = 'cell-text';
+                if (activeCell.string === str && activeCell.step === step) { cell.classList.add('border-indigo-500', 'bg-indigo-950/40', 'ring-2', 'ring-indigo-400/40'); textEl.classList.add('text-indigo-400'); } else { cell.classList.add('border-slate-800/80'); }
+                if (data && data.val !== null) { textEl.innerText = data.val; textEl.classList.remove('text-slate-500'); if (data.val === 'X') { cell.classList.add('bg-rose-950/20', 'border-rose-900/40'); textEl.classList.add('text-rose-400'); } else { cell.classList.add('bg-slate-800', 'border-slate-600'); textEl.classList.add('text-white'); } }
+                else { textEl.innerText = '-'; textEl.classList.add('text-slate-600'); }
+                if (data && data.effect) { badgeEl.innerText = data.effect; badgeEl.classList.remove('hidden');
+                    if (data.effect === 'H') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-orange-500 text-white';
+                    else if (data.effect === 'P') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-cyan-500 text-slate-950';
+                    else if (data.effect === 'S') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-purple-500 text-white';
+                    else if (data.effect === 'T') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-emerald-500 text-slate-950';
+                    else if (data.effect === 'N') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-yellow-500 text-slate-950';
+                    else if (data.effect === 'V') badgeEl.className = 'effect-badge absolute -top-1.5 -right-1 text-[8px] font-black px-1 py-0.2 rounded bg-pink-500 text-white';
+                } else { badgeEl.classList.add('hidden'); }
+            }}
         }
 
-        // --- AUTO-ADD COLUMN ---
-        function addColumns(count, skipScroll = false) {
-            const newCols = currentCols + count; if (newCols > 999) { showToast("Limite: 999 tempos!", "alert-circle"); return; }
-            stopPlayback(); ensureDataCapacity(newCols);
-            for (let str = 0; str < 6; str++) for (let step = currentCols; step < newCols; step++) tabData[str][step] = { val: null, effect: "" };
-            currentCols = newCols; document.getElementById('cols-input').value = currentCols;
-            if (activeCell.step !== null && activeCell.step >= currentCols) activeCell.step = currentCols - 1;
-            initializeGrid(); markDirty();
-            if (!skipScroll && count <= 1) setTimeout(() => autoScrollToStep(currentCols - 1), 50);
-            if (count === 1) showToast(`+1 tempo! Total: ${currentCols}`, "plus");
-        }
+        function addColumns(count, skipScroll = false) { const newCols = currentCols + count; if (newCols > 999) { showToast("Limite: 999 tempos!", "alert-circle"); return; } stopPlayback(); ensureDataCapacity(newCols); for (let str = 0; str < 6; str++) for (let step = currentCols; step < newCols; step++) tabData[str][step] = { val: null, effect: "" }; currentCols = newCols; document.getElementById('cols-input').value = currentCols; if (activeCell.step !== null && activeCell.step >= currentCols) activeCell.step = currentCols - 1; initializeGrid(); markDirty(); if (!skipScroll && count <= 1) setTimeout(() => autoScrollToStep(currentCols - 1), 50); if (count === 1) showToast(`+1 tempo! Total: ${currentCols}`, "plus"); }
+        function removeColumn() { if (currentCols <= 1) { showToast("Mínimo: 1 tempo!", "alert-circle"); return; } stopPlayback(); currentCols--; document.getElementById('cols-input').value = currentCols; if (activeCell.step !== null && activeCell.step >= currentCols) activeCell.step = currentCols - 1; initializeGrid(); markDirty(); showToast(`1 tempo removido. Total: ${currentCols}`, "minus"); }
+        function setNoteValue(val) { if (activeCell.string === null || activeCell.step === null) { showToast("Selecione um tempo!", "alert-circle"); return; } if (activeCell.step === currentCols - 1) { addColumns(1, true); activeCell.step = currentCols - 2; } const str = activeCell.string, step = activeCell.step; if (val === 'X') { tabData[str][step].val = 'X'; tabData[str][step].effect = ''; triggerGuitarNote(str, 'X'); } else if (val === null) { tabData[str][step].val = null; tabData[str][step].effect = ''; dampString(str); } else { tabData[str][step].val = parseInt(val); triggerGuitarNote(str, parseInt(val), tabData[str][step].effect); } markDirty(); updateGridUI(); if (step < currentCols - 1) { activeCell.step = step + 1; updateGridUI(); if (window.innerWidth < 1024) setTimeout(() => autoScrollToStep(activeCell.step), 100); } }
 
-        function removeColumn() {
-            if (currentCols <= 1) { showToast("Mínimo: 1 tempo!", "alert-circle"); return; }
-            stopPlayback(); currentCols--; document.getElementById('cols-input').value = currentCols;
-            if (activeCell.step !== null && activeCell.step >= currentCols) activeCell.step = currentCols - 1;
-            initializeGrid(); markDirty(); showToast(`1 tempo removido. Total: ${currentCols}`, "minus");
-        }
-
-        function setNoteValue(val) {
-            if (activeCell.string === null || activeCell.step === null) { showToast("Selecione um tempo na grade!", "alert-circle"); return; }
-            if (activeCell.step === currentCols - 1) { addColumns(1, true); activeCell.step = currentCols - 2; }
-            const str = activeCell.string, step = activeCell.step;
-            if (val === 'X') { tabData[str][step].val = 'X'; tabData[str][step].effect = ''; triggerGuitarNote(str, 'X'); }
-            else if (val === null) { tabData[str][step].val = null; tabData[str][step].effect = ''; dampString(str); }
-            else { tabData[str][step].val = parseInt(val); triggerGuitarNote(str, parseInt(val), tabData[str][step].effect); }
-            markDirty(); updateGridUI();
-            if (step < currentCols - 1) { activeCell.step = step + 1; updateGridUI(); if (window.innerWidth < 1024) setTimeout(() => autoScrollToStep(activeCell.step), 100); }
-        }
-
-        // Keyboard
-        document.addEventListener('keydown', (e) => {
-            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
-            if (e.key >= '0' && e.key <= '9') setNoteValue(e.key);
-            else if (e.key === 'x' || e.key === 'X') setNoteValue('X');
-            else if (e.key === 'Backspace' || e.key === 'Delete') setNoteValue(null);
-            else if (e.key === 'ArrowRight' && activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); autoScrollToStep(activeCell.step); }
-            else if (e.key === 'ArrowLeft' && activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); autoScrollToStep(activeCell.step); }
-            else if (e.key === 'ArrowUp' && activeCell.string !== null && activeCell.string > 0) { activeCell.string--; updateGridUI(); }
-            else if (e.key === 'ArrowDown' && activeCell.string !== null && activeCell.string < 5) { activeCell.string++; updateGridUI(); }
-            else if (e.key === ' ') { e.preventDefault(); togglePlayback(); }
-        });
-
+        document.addEventListener('keydown', (e) => { if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return; if (e.key >= '0' && e.key <= '9') setNoteValue(e.key); else if (e.key === 'x' || e.key === 'X') setNoteValue('X'); else if (e.key === 'Backspace' || e.key === 'Delete') setNoteValue(null); else if (e.key === 'ArrowRight' && activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); autoScrollToStep(activeCell.step); } else if (e.key === 'ArrowLeft' && activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); autoScrollToStep(activeCell.step); } else if (e.key === 'ArrowUp' && activeCell.string !== null && activeCell.string > 0) { activeCell.string--; updateGridUI(); } else if (e.key === 'ArrowDown' && activeCell.string !== null && activeCell.string < 5) { activeCell.string++; updateGridUI(); } else if (e.key === ' ') { e.preventDefault(); togglePlayback(); } });
         document.querySelectorAll('.fret-btn').forEach(btn => { btn.addEventListener('click', () => setNoteValue(btn.getAttribute('data-val'))); });
-
-        document.querySelectorAll('.effect-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const effect = btn.getAttribute('data-effect');
-                if (activeCell.string === null || activeCell.step === null) { showToast("Escolha uma nota!", "sparkles"); return; }
-                const cd = tabData[activeCell.string][activeCell.step];
-                if (cd.val === null) { showToast("Escreva um traste antes!", "alert-circle"); return; }
-                cd.effect = effect; triggerGuitarNote(activeCell.string, cd.val, effect); markDirty(); updateGridUI();
-            });
-        });
-
-        document.getElementById('btn-remove-effect').addEventListener('click', () => {
-            if (activeCell.string !== null && activeCell.step !== null) { tabData[activeCell.string][activeCell.step].effect = ''; markDirty(); updateGridUI(); showToast("Efeito removido."); }
-        });
+        document.querySelectorAll('.effect-btn').forEach(btn => { btn.addEventListener('click', () => { const effect = btn.getAttribute('data-effect'); if (activeCell.string === null || activeCell.step === null) { showToast("Escolha uma nota!", "sparkles"); return; } const cd = tabData[activeCell.string][activeCell.step]; if (cd.val === null) { showToast("Escreva um traste antes!", "alert-circle"); return; } cd.effect = effect; triggerGuitarNote(activeCell.string, cd.val, effect); markDirty(); updateGridUI(); }); });
+        document.getElementById('btn-remove-effect').addEventListener('click', () => { if (activeCell.string !== null && activeCell.step !== null) { tabData[activeCell.string][activeCell.step].effect = ''; markDirty(); updateGridUI(); showToast("Efeito removido."); } });
 
         // Playback
         function togglePlayback() { if (isPlaying) stopPlayback(); else startPlayback(); }
-        function startPlayback() {
-            if (isPlaying) return; isPlaying = true; currentStep = activeCell.step !== null ? activeCell.step : 0;
-            document.getElementById('btn-play-all').innerHTML = '<i data-lucide="pause" class="w-5 h-5 mb-1 fill-current"></i><span class="text-[10px] font-bold uppercase">Pausar</span>'; lucide.createIcons();
-            const stepMs = (60000 / bpm) / 4;
-            playbackInterval = setInterval(() => {
-                playSequencerStep(currentStep); moveCursor(currentStep); currentStep++;
-                if (currentStep >= currentCols) { if (document.getElementById('loop-switch').checked) currentStep = 0; else stopPlayback(); }
-            }, stepMs);
-        }
-        function stopPlayback() {
-            if (!isPlaying) return; isPlaying = false; clearInterval(playbackInterval);
-            document.getElementById('btn-play-all').innerHTML = '<i data-lucide="play" class="w-5 h-5 mb-1 fill-current"></i><span class="text-[10px] font-bold uppercase">Tocar</span>'; lucide.createIcons(); moveCursor(-1);
-            for (let i = 0; i < 6; i++) dampString(i);
-        }
+        function startPlayback() { if (isPlaying) return; isPlaying = true; currentStep = activeCell.step !== null ? activeCell.step : 0; document.getElementById('btn-play-all').innerHTML = '<i data-lucide="pause" class="w-5 h-5 mb-1 fill-current"></i><span class="text-[10px] font-bold uppercase">Pausar</span>'; lucide.createIcons(); const stepMs = (60000 / bpm) / 4; playbackInterval = setInterval(() => { playSequencerStep(currentStep); moveCursor(currentStep); currentStep++; if (currentStep >= currentCols) { if (document.getElementById('loop-switch').checked) currentStep = 0; else stopPlayback(); } }, stepMs); }
+        function stopPlayback() { if (!isPlaying) return; isPlaying = false; clearInterval(playbackInterval); document.getElementById('btn-play-all').innerHTML = '<i data-lucide="play" class="w-5 h-5 mb-1 fill-current"></i><span class="text-[10px] font-bold uppercase">Tocar</span>'; lucide.createIcons(); moveCursor(-1); for (let i = 0; i < 6; i++) dampString(i); }
         function playSequencerStep(si) { for (let str = 0; str < 6; str++) { const cd = tabData[str][si]; if (cd && cd.val !== null) { triggerGuitarNote(str, cd.val, cd.effect); triggerVisualPulse(str, si); } } }
         function triggerVisualPulse(str, si) { const cell = document.querySelector(`.string-steps[data-string="${str}"] [data-step="${si}"]`); if (cell) { cell.classList.add('scale-110', 'border-indigo-400', 'shadow-[0_0_12px_rgba(99,102,241,0.8)]'); setTimeout(() => cell.classList.remove('scale-110', 'border-indigo-400', 'shadow-[0_0_12px_rgba(99,102,241,0.8)]'), 150); } }
-        function moveCursor(si) {
-            const cursor = document.getElementById('play-cursor'); if (si === -1) { cursor.style.opacity = '0'; return; }
-            cursor.style.opacity = '1'; const cell = document.querySelector(`.string-steps[data-string="0"] [data-step="${si}"]`);
-            if (cell) { const rect = cell.getBoundingClientRect(); const contRect = document.getElementById('tab-grid-container').getBoundingClientRect(); cursor.style.left = `${rect.left - contRect.left + (rect.width / 2)}px`; if (window.innerWidth < 1024) autoScrollToStep(si); }
-        }
+        function moveCursor(si) { const cursor = document.getElementById('play-cursor'); if (si === -1) { cursor.style.opacity = '0'; return; } cursor.style.opacity = '1'; const cell = document.querySelector(`.string-steps[data-string="0"] [data-step="${si}"]`); if (cell) { const rect = cell.getBoundingClientRect(); const contRect = document.getElementById('tab-grid-container').getBoundingClientRect(); cursor.style.left = `${rect.left - contRect.left + (rect.width / 2)}px`; if (window.innerWidth < 1024) autoScrollToStep(si); } }
 
-        // Col controls
-        document.getElementById('btn-add-col').addEventListener('click', () => addColumns(1));
-        document.getElementById('btn-add-10-cols').addEventListener('click', () => addColumns(10));
-        document.getElementById('btn-remove-col').addEventListener('click', () => removeColumn());
-        document.getElementById('btn-add-col-inline').addEventListener('click', () => addColumns(1));
-        document.querySelectorAll('.string-add-btn').forEach(btn => { btn.addEventListener('click', () => addColumns(1)); });
-        const colsInput = document.getElementById('cols-input');
-        colsInput.addEventListener('change', () => { let val = parseInt(colsInput.value); if (isNaN(val) || val < 1) val = 1; if (val > 999) val = 999; colsInput.value = val; stopPlayback(); ensureDataCapacity(val); currentCols = val; initializeGrid(); markDirty(); });
-
+        // Controls
+        document.getElementById('btn-add-col').addEventListener('click', () => addColumns(1)); document.getElementById('btn-add-10-cols').addEventListener('click', () => addColumns(10)); document.getElementById('btn-remove-col').addEventListener('click', () => removeColumn()); document.getElementById('btn-add-col-inline').addEventListener('click', () => addColumns(1)); document.querySelectorAll('.string-add-btn').forEach(btn => { btn.addEventListener('click', () => addColumns(1)); });
+        const colsInput = document.getElementById('cols-input'); colsInput.addEventListener('change', () => { let val = parseInt(colsInput.value); if (isNaN(val) || val < 1) val = 1; if (val > 999) val = 999; colsInput.value = val; stopPlayback(); ensureDataCapacity(val); currentCols = val; initializeGrid(); markDirty(); });
         document.getElementById('btn-prev-step').addEventListener('click', () => { if (activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); autoScrollToStep(activeCell.step); } });
         document.getElementById('btn-next-step').addEventListener('click', () => { if (activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); autoScrollToStep(activeCell.step); } });
-
         function adjustBPM(amount) { bpm = Math.max(40, Math.min(240, bpm + amount)); document.getElementById('bpm-display').innerText = bpm; markDirty(); if (isPlaying) { stopPlayback(); startPlayback(); } }
-        document.getElementById('bpm-minus').addEventListener('click', () => adjustBPM(-5));
-        document.getElementById('bpm-plus').addEventListener('click', () => adjustBPM(5));
-
-        document.getElementById('btn-play-all').addEventListener('click', togglePlayback);
-        document.getElementById('btn-stop').addEventListener('click', stopPlayback);
+        document.getElementById('bpm-minus').addEventListener('click', () => adjustBPM(-5)); document.getElementById('bpm-plus').addEventListener('click', () => adjustBPM(5));
+        document.getElementById('btn-play-all').addEventListener('click', togglePlayback); document.getElementById('btn-stop').addEventListener('click', stopPlayback);
         document.getElementById('btn-clear').addEventListener('click', () => { if (confirm("Apagar todas as notas?")) { for (let str = 0; str < 6; str++) for (let step = 0; step < 999; step++) tabData[str][step] = { val: null, effect: "" }; activeCell = { string: null, step: null }; initializeGrid(); markDirty(); showToast("Grade redefinida!", "trash-2"); } });
 
-        function loadDemo(demoId) {
-            stopPlayback(); for (let str = 0; str < 6; str++) for (let step = 0; step < 999; step++) tabData[str][step] = { val: null, effect: "" };
-            currentProjectId = null; updateProjectStatus('Novo Projeto', true);
+        function loadDemo(demoId) { stopPlayback(); for (let str = 0; str < 6; str++) for (let step = 0; step < 999; step++) tabData[str][step] = { val: null, effect: "" }; currentProjectId = null; updateProjectStatus('Novo Projeto', true);
             if (demoId === 1) { bpm = 85; currentCols = 16; document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = currentCols; tabData[5][0] = { val: 8, effect: '' }; tabData[3][2] = { val: 9, effect: '' }; tabData[2][4] = { val: 9, effect: '' }; tabData[1][6] = { val: 8, effect: '' }; tabData[0][8] = { val: 10, effect: 'N' }; tabData[5][10] = { val: 3, effect: '' }; tabData[2][12] = { val: 0, effect: '' }; tabData[1][14] = { val: 3, effect: 'V' }; showToast("Demo carregado!", "music"); }
             else if (demoId === 2) { bpm = 105; currentCols = 16; document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = currentCols; tabData[5][0] = { val: 0, effect: '' }; tabData[2][1] = { val: 2, effect: '' }; tabData[2][2] = { val: 4, effect: 'S' }; tabData[1][4] = { val: 0, effect: '' }; tabData[0][6] = { val: 0, effect: 'H' }; tabData[0][7] = { val: 2, effect: '' }; tabData[5][9] = { val: 'X', effect: '' }; showToast("Demo carregado!", "sparkles"); }
-            activeCell = { string: 0, step: 0 }; initializeGrid();
-        }
-        document.getElementById('btn-load-demo-1').addEventListener('click', () => loadDemo(1));
-        document.getElementById('btn-load-demo-2').addEventListener('click', () => loadDemo(2));
+            activeCell = { string: 0, step: 0 }; initializeGrid(); }
+        document.getElementById('btn-load-demo-1').addEventListener('click', () => loadDemo(1)); document.getElementById('btn-load-demo-2').addEventListener('click', () => loadDemo(2));
 
         // Export Text
-        function generateTraditionalTextTab() {
-            let result = ''; const stringLabels = ['E|', 'B|', 'G|', 'D|', 'A|', 'E|'];
-            for (let str = 0; str < 6; str++) { let sLine = stringLabels[str]; for (let step = 0; step < currentCols; step++) { const cell = tabData[str][step]; let ch = '-', ef = ''; if (cell.val !== null) { ch = cell.val.toString(); if (cell.effect) ef = cell.effect.toLowerCase(); } sLine += ch + ef; const fill = 4 - (ch.length + ef.length); for (let f = 0; f < Math.max(1, fill); f++) sLine += '-'; } result += sLine + '\n'; }
-            return result;
-        }
+        function generateTraditionalTextTab() { let result = ''; const stringLabels = ['E|', 'B|', 'G|', 'D|', 'A|', 'E|']; for (let str = 0; str < 6; str++) { let sLine = stringLabels[str]; for (let step = 0; step < currentCols; step++) { const cell = tabData[str][step]; let ch = '-', ef = ''; if (cell.val !== null) { ch = cell.val.toString(); if (cell.effect) ef = cell.effect.toLowerCase(); } sLine += ch + ef; const fill = 4 - (ch.length + ef.length); for (let f = 0; f < Math.max(1, fill); f++) sLine += '-'; } result += sLine + '\n'; } return result; }
         document.getElementById('btn-export-text').addEventListener('click', () => { document.getElementById('export-preview').innerText = generateTraditionalTextTab(); document.getElementById('export-container').classList.remove('hidden'); document.getElementById('export-container').scrollIntoView({ behavior: 'smooth' }); showToast("Visualização gerada!"); });
+        document.getElementById('btn-download-txt').addEventListener('click', () => { const txt = generateTraditionalTextTab(); const date = new Date().toISOString().slice(0, 10); const p = getSavedProjects(); const pname = currentProjectId && p[currentProjectId] ? p[currentProjectId].name : 'tablatura'; const blob = new Blob([`=========================================\n`, ` TABLATURA - ${pname.toUpperCase()}\n`, ` BPM: ${bpm} | Tempos: ${currentCols}\n`, ` Data: ${new Date().toLocaleDateString('pt-BR')}\n`, `=========================================\n\n`, txt], { type: 'text/plain;charset=utf-8' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${pname.replace(/\s+/g, '-').toLowerCase()}-${date}.txt`; document.body.appendChild(link); link.click(); document.body.removeChild(link); showToast("Download .TXT!", "check-circle"); });
 
-        // TXT
-        document.getElementById('btn-download-txt').addEventListener('click', () => {
-            const txt = generateTraditionalTextTab(); const date = new Date().toISOString().slice(0, 10);
-            const projects = getSavedProjects(); const pname = currentProjectId && projects[currentProjectId] ? projects[currentProjectId].name : 'tablatura';
-            const blob = new Blob([`=========================================\n`, ` TABLATURA - ${pname.toUpperCase()}\n`, ` BPM: ${bpm} | Tempos: ${currentCols}\n`, ` Data: ${new Date().toLocaleDateString('pt-BR')}\n`, `=========================================\n\n`, txt], { type: 'text/plain;charset=utf-8' });
-            const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${pname.replace(/\s+/g, '-').toLowerCase()}-${date}.txt`; document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            showToast("Download .TXT!", "check-circle");
-        });
-
-        // MIDI
+        // MIDI Export
         function downloadMidi() {
-            const projects = getSavedProjects(); const pname = currentProjectId && projects[currentProjectId] ? projects[currentProjectId].name : 'TabCraft_Project';
-            const ticksPerBeat = 480; const stepDurationTicks = ticksPerBeat / 4;
+            const p = getSavedProjects(); const pname = currentProjectId && p[currentProjectId] ? p[currentProjectId].name : 'TabCraft_Project'; const ticksPerBeat = 480; const stepDurationTicks = ticksPerBeat / 4;
             let midiData = []; midiData.push(77, 84, 104, 100, 0, 0, 0, 6, 0, 1, 0, 2); midiData.push(...numToBytes(ticksPerBeat, 2));
-            let track1 = []; const microsecondsPerBeat = Math.floor(60000000 / bpm);
-            track1.push(0x00, 0xFF, 0x51, 0x03, ...numToBytes(microsecondsPerBeat, 3)); track1.push(0x00, 0xFF, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08); track1.push(0x00, 0xFF, 0x2F, 0x00);
+            let track1 = []; const mpb = Math.floor(60000000 / bpm); track1.push(0x00, 0xFF, 0x51, 0x03, ...numToBytes(mpb, 3)); track1.push(0x00, 0xFF, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08); track1.push(0x00, 0xFF, 0x2F, 0x00);
             midiData.push(77, 84, 114, 107); midiData.push(...numToBytes(track1.length, 4)); midiData.push(...track1);
             let track2 = []; let events = []; const openMidi = [64, 59, 55, 50, 45, 40];
-            for (let str = 0; str < 6; str++) { let lastNoteStart = -1, lastNotePitch = -1;
-                for (let step = 0; step <= currentCols; step++) {
-                    let currentVal = (step < currentCols) ? tabData[str][step].val : null;
-                    let isMute = (currentVal === 'X'); let isNewNote = (currentVal !== null && !isMute);
-                    if (lastNoteStart !== -1 && (isNewNote || isMute || step === currentCols)) { events.push({ tick: step * stepDurationTicks, type: 'off', note: lastNotePitch }); lastNoteStart = -1; lastNotePitch = -1; }
-                    if (isNewNote) { const pitch = openMidi[str] + parseInt(currentVal); lastNoteStart = step; lastNotePitch = pitch; events.push({ tick: step * stepDurationTicks, type: 'on', note: pitch, velocity: 100 }); }
-                }
-            }
-            events.sort((a, b) => { if (a.tick !== b.tick) return a.tick - b.tick; if (a.type === 'off' && b.type === 'on') return -1; return 0; });
-            let absTick = 0; events.forEach(evt => { const delta = evt.tick - absTick; absTick = evt.tick; track2.push(...numToVariableLength(delta)); if (evt.type === 'on') { track2.push(0x90, evt.note, evt.velocity); } else { track2.push(0x80, evt.note, 0x40); } });
-            track2.push(0x00, 0xFF, 0x2F, 0x00); midiData.push(77, 84, 114, 107); midiData.push(...numToBytes(track2.length, 4)); midiData.push(...track2);
-            const blob = new Blob([new Uint8Array(midiData)], { type: 'audio/midi' }); const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = `${pname.replace(/\s+/g, '_')}.mid`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-            showToast("Arquivo MIDI gerado! 🎹", "music-2");
+            for (let str = 0; str < 6; str++) { let lastNoteStart = -1, lastNotePitch = -1; for (let step = 0; step <= currentCols; step++) { let cv = (step < currentCols) ? tabData[str][step].val : null; let isMute = (cv === 'X'); let isNew = (cv !== null && !isMute); if (lastNoteStart !== -1 && (isNew || isMute || step === currentCols)) { events.push({ tick: step * stepDurationTicks, type: 'off', note: lastNotePitch }); lastNoteStart = -1; lastNotePitch = -1; } if (isNew) { const pitch = openMidi[str] + parseInt(cv); lastNoteStart = step; lastNotePitch = pitch; events.push({ tick: step * stepDurationTicks, type: 'on', note: pitch, velocity: 100 }); } } }
+            events.sort((a, b) => { if (a.tick !== b.tick) return a.tick - b.tick; if (a.type === 'off' && b.type === 'on') return -1; return 0; }); let absTick = 0;
+            events.forEach(evt => { const delta = evt.tick - absTick; absTick = evt.tick; track2.push(...numToVariableLength(delta)); if (evt.type === 'on') { track2.push(0x90, evt.note, evt.velocity); } else { track2.push(0x80, evt.note, 0x40); } }); track2.push(0x00, 0xFF, 0x2F, 0x00);
+            midiData.push(77, 84, 114, 107); midiData.push(...numToBytes(track2.length, 4)); midiData.push(...track2);
+            const blob = new Blob([new Uint8Array(midiData)], { type: 'audio/midi' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${pname.replace(/\s+/g, '_')}.mid`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); showToast("Arquivo MIDI gerado! 🎹", "music-2");
         }
         function numToBytes(num, bytes) { const arr = []; for (let i = bytes - 1; i >= 0; i--) arr.push((num >> (i * 8)) & 0xFF); return arr; }
         function numToVariableLength(num) { const arr = []; let buffer = num & 0x7F; while ((num >>= 7)) { buffer <<= 8; buffer |= ((num & 0x7F) | 0x80); } while (true) { arr.push(buffer & 0xFF); if (buffer & 0x80) buffer >>= 8; else break; } return arr; }
         document.getElementById('btn-download-midi').addEventListener('click', downloadMidi);
 
+        // --- MIDI IMPORT ---
+        document.getElementById('btn-import-midi').addEventListener('click', () => document.getElementById('midi-file-input').click());
+        document.getElementById('midi-file-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0]; if (!file) return;
+            try {
+                const ab = await file.arrayBuffer(); const midi = parseMidi(ab);
+                const { tabData: newTab, cols } = midiToTab(midi);
+                currentCols = Math.max(cols, 16); bpm = midi.extractedBpm || bpm;
+                document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = currentCols;
+                tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" })));
+                for (let s = 0; s < 6; s++) for (let step = 0; step < cols; step++) if (newTab[s][step]) tabData[s][step] = newTab[s][step];
+                activeCell = { string: 0, step: 0 }; initializeGrid(); markDirty(); showToast(`MIDI importado! ${currentCols} tempos • ${bpm} BPM`, "upload-cloud");
+            } catch (err) { console.error(err); showToast("Erro ao ler arquivo MIDI.", "alert-triangle"); }
+            e.target.value = '';
+        });
+
+        function parseMidi(ab) {
+            const view = new DataView(ab); let offset = 0;
+            const r8 = () => view.getUint8(offset++);
+            const r16 = () => { const v = view.getUint16(offset); offset += 2; return v; };
+            const r32 = () => { const v = view.getUint32(offset); offset += 4; return v; };
+            const rStr = (l) => { let s = ''; for(let i=0;i<l;i++) s += String.fromCharCode(r8()); return s; };
+            if (rStr(4) !== 'MThd') throw new Error('Invalid MIDI');
+            r32(); const fmt = r16(); const nTracks = r16(); const division = r16();
+            let defaultTempo = 500000; const tracks = [];
+            for (let t = 0; t < nTracks; t++) {
+                if (rStr(4) !== 'MTrk') { r32(); continue; }
+                const tLen = r32(); const tEnd = offset + tLen;
+                const events = []; let absTick = 0; let runningStatus = 0;
+                while (offset < tEnd) {
+                    absTick += rVar(); let status = r8();
+                    if (status < 0x80) { status = runningStatus; offset--; } else { runningStatus = status; }
+                    const type = status & 0xF0;
+                    if (type === 0x90) { const n = r8(); const v = r8(); events.push({ absTick, type: v === 0 ? 'off' : 'on', note: n, vel: v }); }
+                    else if (type === 0x80) { r8(); r8(); events.push({ absTick, type: 'off' }); }
+                    else if (type === 0xFF) { const mt = r8(); const ml = rVar(); if (mt === 0x51 && ml === 3) { const mpb = (r8() << 16) | (r8() << 8) | r8(); if (absTick < 500) defaultTempo = mpb; } else { offset += ml; } }
+                    else if (type === 0xF0 || type === 0xF7) { offset += rVar(); }
+                    else { if (type === 0xC0 || type === 0xD0) r8(); else { r8(); r8(); } }
+                }
+                offset = tEnd; tracks.push(events);
+            }
+            return { division, tracks, extractedBpm: Math.round(60000000 / defaultTempo) };
+        }
+
+        function rVar() { const view = new DataView(document.getElementById('midi-file-input').files[0] ? document.getElementById('midi-file-input').files[0] : ''); let v = 0; let b; do { b = view.getUint8(offset++); v = (v << 7) | (b & 0x7F); } while (b & 0x80); return v; }
+        // Fix: parseMidi needs its own offset variable
+        function parseMidiFixed(arrayBuffer) {
+            const view = new DataView(arrayBuffer); let o = 0;
+            const r8 = () => view.getUint8(o++);
+            const r16 = () => { const v = view.getUint16(o); o += 2; return v; };
+            const r32 = () => { const v = view.getUint32(o); o += 4; return v; };
+            const rStr = (l) => { let s = ''; for(let i=0;i<l;i++) s += String.fromCharCode(r8()); return s; };
+            const rVar = () => { let v = 0; let b; do { b = r8(); v = (v << 7) | (b & 0x7F); } while (b & 0x80); return v; };
+            if (rStr(4) !== 'MThd') throw new Error('Invalid MIDI');
+            r32(); const nTracks = r16(); const division = r16();
+            let defaultTempo = 500000; const tracks = [];
+            for (let t = 0; t < nTracks; t++) {
+                if (rStr(4) !== 'MTrk') { r32(); continue; }
+                const tLen = r32(); const tEnd = o + tLen;
+                const events = []; let absTick = 0; let runningStatus = 0;
+                while (o < tEnd) {
+                    absTick += rVar(); let status = r8();
+                    if (status < 0x80) { status = runningStatus; o--; } else { runningStatus = status; }
+                    const type = status & 0xF0;
+                    if (type === 0x90) { const n = r8(); const v = r8(); events.push({ absTick, type: v === 0 ? 'off' : 'on', note: n, vel: v }); }
+                    else if (type === 0x80) { r8(); r8(); events.push({ absTick, type: 'off' }); }
+                    else if (type === 0xFF) { const mt = r8(); const ml = rVar(); if (mt === 0x51 && ml === 3) { const mpb = (r8() << 16) | (r8() << 8) | r8(); if (absTick < 500) defaultTempo = mpb; } else { o += ml; } }
+                    else if (type === 0xF0 || type === 0xF7) { o += rVar(); }
+                    else { if (type === 0xC0 || type === 0xD0) r8(); else { r8(); r8(); } }
+                }
+                o = tEnd; tracks.push(events);
+            }
+            return { division, tracks, extractedBpm: Math.round(60000000 / defaultTempo) };
+        }
+
+        // Rebind with correct parser
+        document.getElementById('btn-import-midi').replaceWith(document.getElementById('btn-import-midi').cloneNode(true));
+        document.getElementById('btn-import-midi').addEventListener('click', () => document.getElementById('midi-file-input').click());
+        document.getElementById('midi-file-input').onchange = async function(e) {
+            const file = e.target.files[0]; if (!file) return;
+            try {
+                const ab = await file.arrayBuffer(); const midi = parseMidiFixed(ab);
+                const { tabData: newTab, cols } = midiToTab(midi);
+                currentCols = Math.max(cols, 16); bpm = midi.extractedBpm || bpm;
+                document.getElementById('bpm-display').innerText = bpm; document.getElementById('cols-input').value = currentCols;
+                tabData = Array(6).fill(null).map(() => Array(999).fill(null).map(() => ({ val: null, effect: "" })));
+                for (let s = 0; s < 6; s++) for (let step = 0; step < cols; step++) if (newTab[s][step]) tabData[s][step] = newTab[s][step];
+                activeCell = { string: 0, step: 0 }; initializeGrid(); markDirty(); showToast(`MIDI importado! ${currentCols} tempos • ${bpm} BPM`, "upload-cloud");
+            } catch (err) { console.error(err); showToast("Erro ao ler arquivo MIDI.", "alert-triangle"); }
+            e.target.value = '';
+        };
+
+        function midiToTab(midiData) {
+            const ticksPerBeat = midiData.division; const stepsPerBeat = 4; const ticksPerStep = ticksPerBeat / stepsPerBeat;
+            const openStrings = [64, 59, 55, 50, 45, 40];
+            let noteMap = {}; const notes = [];
+            for (const tr of midiData.tracks) for (const ev of tr) if (ev.type === 'on' || ev.type === 'off') notes.push(ev);
+            notes.sort((a, b) => a.absTick - b.absTick);
+            const mapped = [];
+            for (const ev of notes) {
+                const step = Math.round(ev.absTick / ticksPerStep);
+                if (ev.type === 'on') {
+                    if (!noteMap[ev.note]) { let bestStr = -1, bestFret = 99; for (let s = 0; s < 6; s++) { const fret = ev.note - openStrings[s]; if (fret >= 0 && fret <= 15 && fret < bestFret) { bestFret = fret; bestStr = s; } } if (bestStr !== -1) noteMap[ev.note] = { step, str: bestStr, fret: bestFret }; }
+                } else {
+                    if (noteMap[ev.note]) { mapped.push({ str: noteMap[ev.note].str, fret: noteMap[ev.note].fret, start: noteMap[ev.note].step, end: step }); delete noteMap[ev.note]; }
+                }
+            }
+            let maxStep = 16; mapped.forEach(n => maxStep = Math.max(maxStep, n.end + 1));
+            const tab = Array(6).fill(null).map(() => Array(maxStep).fill(null));
+            for (const n of mapped) if (n.start < maxStep && tab[n.str][n.start] === null) tab[n.str][n.start] = { val: n.fret, effect: "" };
+            return { tabData: tab, cols: maxStep };
+        }
+
         // --- MP3 EXPORT (CORRIGIDO) ---
         async function exportToMp3() {
-            if (typeof lamejs === 'undefined') {
-                showToast("Carregando biblioteca MP3...", "loader");
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
-                script.onload = () => setTimeout(() => startMp3Render(), 200);
-                script.onerror = () => showToast("Falha ao carregar encoder.", "alert-triangle");
-                document.head.appendChild(script);
-            } else { startMp3Render(); }
-        }
-
-        async function startMp3Render() {
-            // Check if there are any notes
-            let hasNotes = false;
-            for (let str = 0; str < 6; str++) { for (let step = 0; step < currentCols; step++) { if (tabData[str][step].val !== null) { hasNotes = true; break; } } if (hasNotes) break; }
+            let hasNotes = false; for (let str = 0; str < 6; str++) for (let step = 0; step < currentCols; step++) if (tabData[str][step].val !== null) hasNotes = true;
             if (!hasNotes) { showToast("Não há notas para exportar.", "alert-circle"); return; }
-
-            showToast("Renderizando áudio...", "music");
-            setTimeout(async () => {
+            showToast("Renderizando áudio...", "music"); setTimeout(async () => {
                 try {
-                    const stepDuration = (60 / bpm) / 4;
-                    const songDuration = currentCols * stepDuration;
-                    const tailDuration = 5.0;
-                    const totalDuration = songDuration + tailDuration;
-                    const sampleRate = 44100;
-
-                    const offlineCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * totalDuration), sampleRate);
-                    const offlineActiveVoices = Array(6).fill(null);
-
-                    // Create master gain to prevent clipping
-                    const masterGain = offlineCtx.createGain();
-                    masterGain.gain.setValueAtTime(0.8, 0);
-                    masterGain.connect(offlineCtx.destination);
-
-                    for (let step = 0; step < currentCols; step++) {
-                        const stepTime = step * stepDuration;
-                        for (let str = 0; str < 6; str++) {
-                            const cd = tabData[str][step];
-                            if (cd && cd.val !== null) {
-                                scheduleOfflineNote(offlineCtx, stepTime, str, cd.val, cd.effect, offlineActiveVoices, masterGain);
-                            }
-                        }
-                    }
-
-                    const audioBuffer = await offlineCtx.startRendering();
-                    showToast("Codificando MP3...", "disc-2");
-
-                    const mp3Blob = await encodeMP3Async(audioBuffer, 128);
-                    const projects = getSavedProjects();
-                    const pname = currentProjectId && projects[currentProjectId] ? projects[currentProjectId].name : 'TabCraft';
-                    const filename = `${pname.replace(/\s+/g, '_').toLowerCase()}.mp3`;
-
-                    const url = URL.createObjectURL(mp3Blob);
-                    const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    showToast("MP3 exportado com sucesso!", "check-circle");
-                } catch (err) { console.error(err); showToast("Erro ao exportar: " + err.message, "alert-triangle"); }
+                    const stepDur = (60 / bpm) / 4; const totalDur = (currentCols * stepDur) + 5.0; const sr = 44100;
+                    const ctx = new OfflineAudioContext(2, Math.ceil(sr * totalDur), sr); const master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
+                    const voices = Array(6).fill(null);
+                    for (let step = 0; step < currentCols; step++) for (let str = 0; str < 6; str++) { const cd = tabData[str][step]; if (cd && cd.val !== null) scheduleOffline(ctx, step * stepDur, str, cd.val, cd.effect, voices, master); }
+                    const buf = await ctx.startRendering(); showToast("Codificando MP3...", "disc-2"); const blob = await encodeMP3Async(buf, 128);
+                    const p = getSavedProjects(); const pn = currentProjectId && p[currentProjectId] ? p[currentProjectId].name : 'TabCraft';
+                    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${pn.replace(/\s+/g, '_').toLowerCase()}.mp3`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); showToast("MP3 exportado!", "check-circle");
+                } catch (err) { showToast("Erro: " + err.message, "alert-triangle"); }
             }, 50);
         }
-
-        function scheduleOfflineNote(ctx, startTime, si, fret, effect, activeVoices, destination) {
-            const frequency = getFretFrequency(si, fret);
-            
-            // Handle Mute
-            if (fret === 'X') {
-                if (activeVoices[si]) {
-                    activeVoices[si].gain.gain.cancelScheduledValues(startTime);
-                    activeVoices[si].gain.gain.setValueAtTime(activeVoices[si].gain.gain.value, startTime);
-                    activeVoices[si].gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.05);
-                    activeVoices[si].osc.stop(startTime + 0.1);
-                    activeVoices[si] = null;
-                }
-                return;
-            }
-
-            if (frequency === 0) return;
-
-            // Handle Slide
-            const prevVoice = activeVoices[si];
-            if (effect === 'S' && prevVoice) {
-                const pf = prevVoice.frequency;
-                prevVoice.osc.frequency.cancelScheduledValues(startTime);
-                prevVoice.osc.frequency.setValueAtTime(pf, startTime);
-                prevVoice.osc.frequency.exponentialRampToValueAtTime(frequency, startTime + 0.18);
-                prevVoice.frequency = frequency; prevVoice.currentFret = fret;
-                return;
-            }
-
-            // Stop previous note on this string
-            if (prevVoice) {
-                prevVoice.gain.gain.cancelScheduledValues(startTime);
-                prevVoice.gain.gain.setValueAtTime(prevVoice.gain.gain.value, startTime);
-                prevVoice.gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.05);
-                prevVoice.osc.stop(startTime + 0.1);
-            }
-
-            // String Gain
-            const stringGain = ctx.createGain();
-            stringGain.gain.setValueAtTime(0.001, startTime);
-            let maxDecay = 3.5, peakGain = 0.4;
-
-            if (effect === 'H') { peakGain = 0.28; maxDecay = 3.0; stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.08); }
-            else if (effect === 'P') { peakGain = 0.32; maxDecay = 2.8; stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.02); }
-            else if (effect === 'T') { peakGain = 0.45; maxDecay = 0.8; stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.01); }
-            else if (effect === 'N') { peakGain = 0.35; maxDecay = 4.5; stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.03); }
-            else { stringGain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.03); }
-
-            stringGain.gain.exponentialRampToValueAtTime(peakGain * 0.3, startTime + 0.4);
-            stringGain.gain.exponentialRampToValueAtTime(0.0001, startTime + maxDecay);
-
-            // Main Oscillator
-            const osc = ctx.createOscillator();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(effect === 'N' ? frequency * 2 : frequency, startTime);
-
-            // Vibrato
-            if (effect === 'V') {
-                const vOsc = ctx.createOscillator(); const vGain = ctx.createGain();
-                vOsc.frequency.setValueAtTime(6.0, startTime); vGain.gain.setValueAtTime(frequency * 0.03, startTime);
-                vOsc.connect(vGain); vGain.connect(osc.frequency); vOsc.start(startTime); vOsc.stop(startTime + maxDecay);
-            }
-
-            // Filter (shared by main osc and harmonics)
-            const filter = ctx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(2200, startTime);
-
-            // Connect main osc to filter
-            osc.connect(filter);
-
-            // Harmonics
-            const harmCfg = [
-                { type: 'sawtooth', factor: 2, gain: 0.08, decayFactor: 0.6 },
-                { type: 'triangle', factor: 3, gain: 0.04, decayFactor: 0.45 }
-            ];
-
-            harmCfg.forEach(cfg => {
-                const oH = ctx.createOscillator();
-                oH.type = cfg.type;
-                oH.frequency.setValueAtTime(frequency * cfg.factor, startTime);
-                
-                const gH = ctx.createGain();
-                gH.gain.setValueAtTime(cfg.gain, startTime);
-                gH.gain.exponentialRampToValueAtTime(0.0001, startTime + (maxDecay * cfg.decayFactor));
-                
-                oH.connect(gH);
-                gH.connect(filter); // CORREÇÃO: conectar ao mesmo filter
-                oH.start(startTime);
-            });
-
-            // Percussive Attack Noise
-            if (effect !== 'H' && effect !== 'P') {
-                const nBuf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
-                const nData = nBuf.getChannelData(0);
-                for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
-                const nNode = ctx.createBufferSource(); nNode.buffer = nBuf;
-                const nFilter = ctx.createBiquadFilter(); nFilter.type = 'bandpass'; nFilter.frequency.setValueAtTime(800, startTime);
-                const nGain = ctx.createGain(); nGain.gain.setValueAtTime(0.08, startTime); nGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
-                nNode.connect(nFilter); nFilter.connect(nGain); nGain.connect(stringGain); nNode.start(startTime);
-            }
-
-            // CORREÇÃO FINAL: Conectar filter -> stringGain -> destination
-            filter.connect(stringGain);
-            stringGain.connect(destination);
-
-            osc.start(startTime);
-            osc.stop(startTime + maxDecay + 0.5);
-
-            activeVoices[si] = { osc, gain: stringGain, frequency, currentFret: fret };
+        function scheduleOffline(ctx, t, si, fret, eff, vs, dest) {
+            const freq = getFretFrequency(si, fret); if (fret === 'X' || freq === 0) { if (vs[si]) { vs[si].gain.cancelScheduledValues(t); vs[si].gain.setValueAtTime(vs[si].gain.value, t); vs[si].gain.exponentialRampToValueAtTime(0.0001, t+0.05); vs[si].osc.stop(t+0.1); vs[si]=null; } return; }
+            if (eff === 'S' && vs[si]) { const pf = vs[si].frequency; vs[si].osc.frequency.cancelScheduledValues(t); vs[si].osc.frequency.setValueAtTime(pf, t); vs[si].osc.frequency.exponentialRampToValueAtTime(freq, t+0.18); vs[si].frequency=freq; return; }
+            if (vs[si]) { vs[si].gain.cancelScheduledValues(t); vs[si].gain.setValueAtTime(vs[si].gain.value, t); vs[si].gain.exponentialRampToValueAtTime(0.0001, t+0.05); vs[si].osc.stop(t+0.1); }
+            const g = ctx.createGain(); g.gain.setValueAtTime(0.001, t); let md = 3.5, pg = 0.4;
+            if (eff==='H'){pg=0.28;md=3;g.gain.exponentialRampToValueAtTime(pg,t+0.08);} else if(eff==='P'){pg=0.32;md=2.8;g.gain.exponentialRampToValueAtTime(pg,t+0.02);} else if(eff==='T'){pg=0.45;md=0.8;g.gain.exponentialRampToValueAtTime(pg,t+0.01);} else if(eff==='N'){pg=0.35;md=4.5;g.gain.exponentialRampToValueAtTime(pg,t+0.03);} else {g.gain.exponentialRampToValueAtTime(pg,t+0.03);}
+            g.gain.exponentialRampToValueAtTime(pg*0.3,t+0.4); g.gain.exponentialRampToValueAtTime(0.0001,t+md);
+            const o = ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(eff==='N'?freq*2:freq,t);
+            if(eff==='V'){const v=ctx.createOscillator();const vg=ctx.createGain();v.frequency.setValueAtTime(6,t);vg.gain.setValueAtTime(freq*0.03,t);v.connect(vg);vg.connect(o.frequency);v.start(t);v.stop(t+md);}
+            const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(2200,t);o.connect(f);
+            [{t:'sawtooth',f:2,g:0.08,d:0.6},{t:'triangle',f:3,g:0.04,d:0.45}].forEach(c=>{const h=ctx.createOscillator();h.type=c.t;h.frequency.setValueAtTime(freq*c.f,t);const hg=ctx.createGain();hg.gain.setValueAtTime(c.g,t);hg.gain.exponentialRampToValueAtTime(0.0001,t+(md*c.d));h.connect(hg);hg.connect(f);h.start(t);});
+            if(eff!=='H'&&eff!=='P'){const nb=ctx.createBuffer(1,sr*0.04,sr);const nd=nb.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;const nn=ctx.createBufferSource();nn.buffer=nb;const nf=ctx.createBiquadFilter();nf.type='bandpass';nf.frequency.setValueAtTime(800,t);const ng=ctx.createGain();ng.gain.setValueAtTime(0.08,t);ng.gain.exponentialRampToValueAtTime(0.0001,t+0.03);nn.connect(nf);nf.connect(ng);ng.connect(g);nn.start(t);}
+            f.connect(g);g.connect(dest);o.start(t);o.stop(t+md+0.5);vs[si]={osc:o,gain:g,frequency:freq};
         }
-
-        async function encodeMP3Async(audioBuffer, kbps) {
-            return new Promise(resolve => {
-                const channels = audioBuffer.numberOfChannels;
-                const sampleRate = audioBuffer.sampleRate;
-                const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, kbps);
-                const mp3Data = [];
-                const left = audioBuffer.getChannelData(0);
-                const right = channels > 1 ? audioBuffer.getChannelData(1) : left;
-                const blockLen = 1152;
-                const len = audioBuffer.length;
-                let i = 0;
-                function processChunk() {
-                    const end = Math.min(i + blockLen, len);
-                    const l = left.subarray(i, end); const r = right.subarray(i, end);
-                    const mp3buf = mp3encoder.encodeBuffer(l, r, l.length);
-                    if (mp3buf.length > 0) mp3Data.push(mp3buf);
-                    i = end;
-                    if (i < len) { setTimeout(processChunk, 0); }
-                    else { mp3Data.push(mp3encoder.flush()); resolve(new Blob(mp3Data, { type: 'audio/mp3' })); }
-                }
-                processChunk();
-            });
-        }
-
+        async function encodeMP3Async(buf, kbps) { return new Promise(res=>{const ch=buf.numberOfChannels,sr=buf.sampleRate;const enc=new lamejs.Mp3Encoder(ch,sr,kbps);const d=[];const l=buf.getChannelData(0),r=ch>1?buf.getChannelData(1):l;const len=buf.length;let i=0;
+            function proc(){const e=Math.min(i+1152,len);const b=enc.encodeBuffer(l.subarray(i,e),r.subarray(i,e),e-i);if(b.length>0)d.push(b);i=e;if(i<len)setTimeout(proc,0);else{d.push(enc.flush());res(new Blob(d,{type:'audio/mp3'}));}} proc(); }); }
         document.getElementById('btn-download-mp3').addEventListener('click', exportToMp3);
 
-        // PDF
+        // --- PDF EXPORT (MULTI-LINE / MULTI-PAGE) ---
         document.getElementById('btn-download-pdf').addEventListener('click', () => {
-            const { jsPDF } = window.jspdf; const isLand = currentCols > 16;
-            const doc = new jsPDF({ orientation: isLand ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
-            const dW = isLand ? 297 : 210, dH = isLand ? 210 : 297;
-            const projects = getSavedProjects(); const pname = currentProjectId && projects[currentProjectId] ? projects[currentProjectId].name : 'Tablatura';
-            const txt = generateTraditionalTextTab();
-            doc.setFillColor(8, 12, 20); doc.rect(0, 0, dW, dH, 'F');
-            doc.setFillColor(30, 41, 59); doc.rect(10, 10, dW - 20, 28, 'F');
-            doc.setFillColor(99, 102, 241); doc.rect(10, 36, dW - 20, 2, 'F');
-            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(`TabCraft PRO: ${pname}`, 15, 20);
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const pageWidth = 210;
+            const pageHeight = 297;
+            const marginX = 15;
+            const marginYTop = 20;
+            const marginYBottom = 15;
+            const contentWidth = pageWidth - marginX * 2;
+            const contentHeight = pageHeight - marginYTop - marginYBottom;
+            const fontSize = 10;
+            const lineHeight = 5.5; // Espaçamento entre linhas das cordas
+            const tabLineHeight = 8; // Espaçamento entre blocos de 6 cordas
+
+            const projects = getSavedProjects();
+            const pname = currentProjectId && projects[currentProjectId] ? projects[currentProjectId].name : 'Tablatura';
+
+            // Background
+            doc.setFillColor(8, 12, 20); doc.rect(0, 0, pageWidth, pageHeight, 'F');
+
+            // Header
+            doc.setFillColor(30, 41, 59); doc.rect(marginX, marginYTop - 10, contentWidth, 28, 'F');
+            doc.setFillColor(99, 102, 241); doc.rect(marginX, marginYTop + 16, contentWidth, 2, 'F');
+            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+            doc.text(`TabCraft PRO: ${pname}`, marginX + 3, marginYTop);
             doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(156, 163, 175);
-            doc.text(`Violão Fingerstyle | ${bpm} BPM | ${currentCols} tempos`, 15, 25);
-            doc.setFillColor(15, 23, 42); doc.rect(10, 48, dW - 20, 100, 'F');
-            doc.setFont('courier', 'bold'); doc.setFontSize(11); doc.setTextColor(52, 211, 153);
-            const lines = txt.split('\n'); let yPos = 62;
-            lines.forEach(line => { if (line.trim().length > 0) { doc.text(line, 16, yPos); yPos += 11; } });
-            doc.save(`${pname.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`);
-            showToast("PDF gerado!", "check-circle");
-        });
+            doc.text(`Violão Fingerstyle | ${bpm} BPM | ${currentCols} tempos`, marginX + 3, marginYTop + 6);
+            doc.text(`Criado em: ${new Date().toLocaleDateString('pt-BR')}`, marginX + 3, marginYTop + 12);
 
-        document.getElementById('btn-copy-tab').addEventListener('click', () => { navigator.clipboard.writeText(document.getElementById('export-preview').innerText).then(() => showToast("Copiado!")).catch(() => showToast("Erro.")); });
-
-        document.getElementById('btn-share').addEventListener('click', () => {
-            const packed = []; for (let str = 0; str < 6; str++) for (let step = 0; step < currentCols; step++) { const c = tabData[str][step]; if (c.val !== null) packed.push(`${str},${step},${c.val},${c.effect || 'none'}`); }
-            const hash = btoa(packed.join('|')); const url = `${window.location.origin}${window.location.pathname}?tab=${hash}`;
-            navigator.clipboard.writeText(url).then(() => showToast("Link copiado!", "share-2")).catch(() => { const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast("Link copiado!", "share-2"); });
-        });
-
-        // Touch Swipe
-        let touchStartX = 0, touchStartY = 0;
-        const gridContainer = document.getElementById('tab-grid-container');
-        gridContainer.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; }, { passive: true });
-        gridContainer.addEventListener('touchend', (e) => {
-            const deltaX = e.changedTouches[0].clientX - touchStartX;
-            const deltaY = e.changedTouches[0].clientY - touchStartY;
-            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 40) {
-                if (deltaX < 0 && activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); autoScrollToStep(activeCell.step); }
-                else if (deltaX > 0 && activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); autoScrollToStep(activeCell.step); }
+            // Generate tab lines (each string line separately)
+            const stringLabels = ['E|', 'B|', 'G|', 'D|', 'A|', 'E|'];
+            const rawLines = [];
+            for (let str = 0; str < 6; str++) {
+                let sLine = stringLabels[str];
+                for (let step = 0; step < currentCols; step++) {
+                    const cell = tabData[str][step]; let ch = '-', ef = '';
+                    if (cell.val !== null) { ch = cell.val.toString(); if (cell.effect) ef = cell.effect.toLowerCase(); }
+                    sLine += ch + ef;
+                    const fill = 4 - (ch.length + ef.length);
+                    for (let f = 0; f < Math.max(1, fill); f++) sLine += '-';
+                }
+                rawLines.push(sLine);
             }
-        }, { passive: true });
 
-        // Events
-        document.getElementById('btn-save-project').addEventListener('click', openSaveModal);
-        document.getElementById('btn-confirm-save').addEventListener('click', confirmSave);
-        document.getElementById('btn-cancel-save').addEventListener('click', closeSaveModal);
-        document.getElementById('btn-open-library').addEventListener('click', openLibrary);
-        document.getElementById('btn-close-library').addEventListener('click', closeLibrary);
-        document.getElementById('project-name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmSave(); });
-        document.getElementById('library-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeLibrary(); });
-        document.getElementById('save-name-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeSaveModal(); });
-        window.addEventListener('beforeunload', (e) => { if (isDirty) { e.preventDefault(); e.returnValue = ''; } });
+            // Calculate chars that fit per line using jsPDF text width measurement
+            doc.setFont('courier', 'normal'); doc.setFontSize(fontSize);
+            const testStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            const testWidth = doc.getTextWidth(testStr);
+            const charWidth = testWidth / testStr.length;
+            const charsPerLine = Math.floor(contentWidth / charWidth);
 
-        let toastTimeout = null;
-        function showToast(message, iconName = 'info') {
-            const toast = document.getElementById('toast'); document.getElementById('toast-message').innerText = message; document.getElementById('toast-icon').setAttribute('data-lucide', iconName); lucide.createIcons();
-            toast.classList.remove('translate-y-20', 'opacity-0'); toast.classList.add('translate-y-0', 'opacity-100');
-            if (toastTimeout) clearTimeout(toastTimeout);
-            toastTimeout = setTimeout(() => { toast.classList.remove('translate-y-0', 'opacity-100'); toast.classList.add('translate-y-20', 'opacity-0'); }, 3000);
-        }
+            // Split each string line into chunks
+            const chunks = [];
+            for (let i = 0; i < 6; i++) {
+                const line = rawLines[i];
+                let start = 0;
+                while (start < line.length) {
+                    // Find a clean break point (at end of a 4-char block or just at charsPerLine)
+                    let end = start + charsPerLine;
+                    // Try to break at a '-' boundary to avoid cutting a fret number
+                    if (end < line.length) {
+                        // Look backwards a bit for a clean break
+                        const searchBack = Math.min(6, end - start);
+                        for (let j = 0; j < searchBack; j++) {
+                            if (line[end - j] === '-' || line[end - j] === '|') { end = end - j; break; }
+                        }
+                    }
+                    chunks.push(line.substring(start, end));
+                    start = end;
+                }
+            }
 
+            // Now chunks contains all the text pieces. We need to print 6 lines at a time (one tab block),
+            // then leave a gap, then print the next 6 lines.
+            let y = marginYTop + 26;
+            let chunkIndex = 0;
+
+            while (chunkIndex < chunks.length) {
+                // Print a block of 6 lines (one string set)
+                for (let lineInBlock = 0; lineInBlock < 6; lineInBlock++) {
+                    if (chunkIndex >= chunks.length) break;
+
+                    // Check if we need a new page
+                    if (y + lineHeight > pageHeight - marginYBottom) {
+                        doc.addPage();
+                        doc.setFillColor(8, 12, 20); doc.rect(0, 0, pageWidth, pageHeight, 'F');
+                        y = marginYTop + 5;
+                        // Continue indicator
+                        doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+                        doc.text(`...continuação de ${pname}`, marginX, y);
+                        y += lineHeight;
+                    }
+
+                    doc.setFont('courier', 'bold'); doc.setFontSize(fontSize); doc.setTextColor(52, 211, 153);
+                    doc.text(chunks[chunkIndex], marginX, y);
+                    y += lineHeight;
+                    chunkIndex++;
+                }
+
+                // Add spacing between tab blocks
+                y += 4;
+            }
+
+            // Footer on last page
+            doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+            doc.text('Gerado por TabCraft Studio PRO', marginX, pageHeight - 10);
+
+            doc.save(`${pname.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`);
+            showToast("PDF completo gerado!", "check-circle");
+        });
+
+        // Share
+        document.getElementById('btn-share').addEventListener('click', () => { const packed = []; for(let s=0;s<6;s++) for(let st=0;st<currentCols;st++) { const c=tabData[s][st]; if(c.val!==null) packed.push(`${s},${st},${c.val},${c.effect||'none'}`); } const url = `${window.location.origin}${window.location.pathname}?tab=${btoa(packed.join('|'))}`; navigator.clipboard.writeText(url).then(()=>showToast("Link copiado!","share-2")); });
+
+        // Touch
+        let touchStartX=0, touchStartY=0; const gridContainer = document.getElementById('tab-grid-container');
+        gridContainer.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; }, { passive: true });
+        gridContainer.addEventListener('touchend', (e) => { const dx = e.changedTouches[0].clientX - touchStartX; const dy = e.changedTouches[0].clientY - touchStartY; if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) { if (dx < 0 && activeCell.step !== null && activeCell.step < currentCols - 1) { activeCell.step++; updateGridUI(); autoScrollToStep(activeCell.step); } else if (dx > 0 && activeCell.step !== null && activeCell.step > 0) { activeCell.step--; updateGridUI(); autoScrollToStep(activeCell.step); } } }, { passive: true });
+
+        // Init & Events
+        document.getElementById('btn-save-project').addEventListener('click', openSaveModal); document.getElementById('btn-confirm-save').addEventListener('click', confirmSave); document.getElementById('btn-cancel-save').addEventListener('click', closeSaveModal); document.getElementById('btn-open-library').addEventListener('click', openLibrary); document.getElementById('btn-close-library').addEventListener('click', closeLibrary); document.getElementById('project-name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmSave(); }); document.getElementById('library-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeLibrary(); }); document.getElementById('save-name-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeSaveModal(); }); window.addEventListener('beforeunload', (e) => { if (isDirty) { e.preventDefault(); e.returnValue = ''; } });
+        let toastTimeout = null; function showToast(msg, icon='info') { const t=document.getElementById('toast'); document.getElementById('toast-message').innerText=msg; document.getElementById('toast-icon').setAttribute('data-lucide',icon); lucide.createIcons(); t.classList.remove('translate-y-20','opacity-0');t.classList.add('translate-y-0','opacity-100'); if(toastTimeout)clearTimeout(toastTimeout); toastTimeout=setTimeout(()=>{t.classList.remove('translate-y-0','opacity-100');t.classList.add('translate-y-20','opacity-0');},3000); }
         window.onload = function() { initializeGrid(); document.body.addEventListener('click', () => { if (audioCtx.state === 'suspended') audioCtx.resume(); }, { once: true }); };
     </script>
 </body>
